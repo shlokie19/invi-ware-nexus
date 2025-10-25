@@ -3,6 +3,27 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { ChevronDown, ChevronRight, Plus, Edit, Trash2, TrendingUp, TrendingDown, Minus } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import { useToast } from "@/hooks/use-toast";
 
 interface Batch {
   id: string;
@@ -124,9 +145,22 @@ const mockData: Category[] = [
 ];
 
 export default function Inventory() {
+  const { toast } = useToast();
+  const [categories, setCategories] = useState<Category[]>(mockData);
   const [expandedCategories, setExpandedCategories] = useState<string[]>([]);
   const [expandedSubcategories, setExpandedSubcategories] = useState<string[]>([]);
   const [expandedItems, setExpandedItems] = useState<string[]>([]);
+
+  // Dialog states
+  const [categoryDialog, setCategoryDialog] = useState<{ open: boolean; mode: "add" | "edit"; data?: Category }>({ open: false, mode: "add" });
+  const [itemDialog, setItemDialog] = useState<{ open: boolean; mode: "add" | "edit"; categoryId?: string; subcategoryId?: string; data?: Item }>({ open: false, mode: "add" });
+  const [batchDialog, setBatchDialog] = useState<{ open: boolean; categoryId?: string; subcategoryId?: string; itemId?: string }>({ open: false });
+  const [deleteDialog, setDeleteDialog] = useState<{ open: boolean; type?: "category" | "subcategory" | "item"; id?: string; parentId?: string; subParentId?: string }>({ open: false });
+
+  // Form states
+  const [categoryForm, setCategoryForm] = useState({ name: "" });
+  const [itemForm, setItemForm] = useState({ name: "", quantity: 0 });
+  const [batchForm, setBatchForm] = useState({ batchNumber: "", quantity: 0, expiryDate: "" });
 
   const toggleCategory = (id: string) => {
     setExpandedCategories((prev) =>
@@ -146,6 +180,130 @@ export default function Inventory() {
     );
   };
 
+  // CRUD handlers
+  const handleAddCategory = () => {
+    if (!categoryForm.name.trim()) return;
+    const newCategory: Category = {
+      id: Date.now().toString(),
+      name: categoryForm.name,
+      subcategories: [],
+    };
+    setCategories([...categories, newCategory]);
+    setCategoryDialog({ open: false, mode: "add" });
+    setCategoryForm({ name: "" });
+    toast({ title: "Category added successfully" });
+  };
+
+  const handleEditCategory = () => {
+    if (!categoryForm.name.trim() || !categoryDialog.data) return;
+    setCategories(categories.map(cat => 
+      cat.id === categoryDialog.data!.id ? { ...cat, name: categoryForm.name } : cat
+    ));
+    setCategoryDialog({ open: false, mode: "add" });
+    setCategoryForm({ name: "" });
+    toast({ title: "Category updated successfully" });
+  };
+
+  const handleDeleteCategory = () => {
+    if (!deleteDialog.id) return;
+    setCategories(categories.filter(cat => cat.id !== deleteDialog.id));
+    setDeleteDialog({ open: false });
+    toast({ title: "Category deleted successfully" });
+  };
+
+  const handleAddItem = () => {
+    if (!itemForm.name.trim() || !itemDialog.categoryId || !itemDialog.subcategoryId) return;
+    const newItem: Item = {
+      id: Date.now().toString(),
+      name: itemForm.name,
+      quantity: itemForm.quantity,
+      status: itemForm.quantity < 15 ? "low" : "normal",
+      lastUpdated: "Just now",
+      batches: [],
+      predictedStock: itemForm.quantity,
+      predictionTrend: "stable",
+      predictionConfidence: 85,
+      predictedStatus: "normal",
+    };
+    setCategories(categories.map(cat => 
+      cat.id === itemDialog.categoryId ? {
+        ...cat,
+        subcategories: cat.subcategories.map(sub =>
+          sub.id === itemDialog.subcategoryId ? {
+            ...sub,
+            items: [...sub.items, newItem]
+          } : sub
+        )
+      } : cat
+    ));
+    setItemDialog({ open: false, mode: "add" });
+    setItemForm({ name: "", quantity: 0 });
+    toast({ title: "Item added successfully" });
+  };
+
+  const handleEditItem = () => {
+    if (!itemForm.name.trim() || !itemDialog.data) return;
+    setCategories(categories.map(cat => ({
+      ...cat,
+      subcategories: cat.subcategories.map(sub => ({
+        ...sub,
+        items: sub.items.map(item =>
+          item.id === itemDialog.data!.id ? {
+            ...item,
+            name: itemForm.name,
+            quantity: itemForm.quantity,
+            status: itemForm.quantity < 15 ? "low" : "normal",
+          } : item
+        )
+      }))
+    })));
+    setItemDialog({ open: false, mode: "add" });
+    setItemForm({ name: "", quantity: 0 });
+    toast({ title: "Item updated successfully" });
+  };
+
+  const handleDeleteItem = () => {
+    if (!deleteDialog.id) return;
+    setCategories(categories.map(cat => ({
+      ...cat,
+      subcategories: cat.subcategories.map(sub => ({
+        ...sub,
+        items: sub.items.filter(item => item.id !== deleteDialog.id)
+      }))
+    })));
+    setDeleteDialog({ open: false });
+    toast({ title: "Item deleted successfully" });
+  };
+
+  const handleAddBatch = () => {
+    if (!batchForm.batchNumber.trim() || !batchDialog.itemId) return;
+    const newBatch: Batch = {
+      id: Date.now().toString(),
+      batchNumber: batchForm.batchNumber,
+      quantity: batchForm.quantity,
+      expiryDate: batchForm.expiryDate,
+    };
+    setCategories(categories.map(cat => 
+      cat.id === batchDialog.categoryId ? {
+        ...cat,
+        subcategories: cat.subcategories.map(sub =>
+          sub.id === batchDialog.subcategoryId ? {
+            ...sub,
+            items: sub.items.map(item =>
+              item.id === batchDialog.itemId ? {
+                ...item,
+                batches: [...item.batches, newBatch]
+              } : item
+            )
+          } : sub
+        )
+      } : cat
+    ));
+    setBatchDialog({ open: false });
+    setBatchForm({ batchNumber: "", quantity: 0, expiryDate: "" });
+    toast({ title: "Batch added successfully" });
+  };
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -153,14 +311,20 @@ export default function Inventory() {
           <h1 className="text-3xl font-bold">Inventory Management</h1>
           <p className="text-muted-foreground">Hierarchical view of all inventory items</p>
         </div>
-        <Button className="bg-primary hover:bg-primary/90">
+        <Button 
+          className="bg-primary hover:bg-primary/90"
+          onClick={() => {
+            setCategoryForm({ name: "" });
+            setCategoryDialog({ open: true, mode: "add" });
+          }}
+        >
           <Plus className="mr-2 h-4 w-4" />
           Add Category
         </Button>
       </div>
 
       <div className="space-y-4">
-        {mockData.map((category) => (
+        {categories.map((category) => (
           <Card key={category.id} className="border-primary/20">
             <CardHeader
               className="cursor-pointer hover:bg-accent/50 transition-colors"
@@ -182,6 +346,8 @@ export default function Inventory() {
                     variant="outline"
                     onClick={(e) => {
                       e.stopPropagation();
+                      setCategoryForm({ name: category.name });
+                      setCategoryDialog({ open: true, mode: "edit", data: category });
                     }}
                   >
                     <Edit className="h-4 w-4" />
@@ -191,6 +357,7 @@ export default function Inventory() {
                     variant="outline"
                     onClick={(e) => {
                       e.stopPropagation();
+                      setDeleteDialog({ open: true, type: "category", id: category.id });
                     }}
                   >
                     <Trash2 className="h-4 w-4" />
@@ -223,6 +390,8 @@ export default function Inventory() {
                             variant="ghost"
                             onClick={(e) => {
                               e.stopPropagation();
+                              setItemForm({ name: "", quantity: 0 });
+                              setItemDialog({ open: true, mode: "add", categoryId: category.id, subcategoryId: subcategory.id });
                             }}
                           >
                             <Plus className="h-3 w-3 mr-1" />
@@ -289,6 +458,8 @@ export default function Inventory() {
                                   variant="ghost"
                                   onClick={(e) => {
                                     e.stopPropagation();
+                                    setItemForm({ name: item.name, quantity: item.quantity });
+                                    setItemDialog({ open: true, mode: "edit", data: item });
                                   }}
                                 >
                                   <Edit className="h-3 w-3" />
@@ -298,6 +469,7 @@ export default function Inventory() {
                                   variant="ghost"
                                   onClick={(e) => {
                                     e.stopPropagation();
+                                    setDeleteDialog({ open: true, type: "item", id: item.id });
                                   }}
                                 >
                                   <Trash2 className="h-3 w-3" />
@@ -309,7 +481,15 @@ export default function Inventory() {
                               <div className="ml-7 space-y-2 pt-2 border-t">
                                 <div className="flex items-center justify-between">
                                   <span className="text-sm font-medium">Batches</span>
-                                  <Button size="sm" variant="outline" className="h-7 text-xs">
+                                  <Button 
+                                    size="sm" 
+                                    variant="outline" 
+                                    className="h-7 text-xs"
+                                    onClick={() => {
+                                      setBatchForm({ batchNumber: "", quantity: 0, expiryDate: "" });
+                                      setBatchDialog({ open: true, categoryId: category.id, subcategoryId: subcategory.id, itemId: item.id });
+                                    }}
+                                  >
                                     <Plus className="h-3 w-3 mr-1" />
                                     Add Batch
                                   </Button>
@@ -343,6 +523,147 @@ export default function Inventory() {
           </Card>
         ))}
       </div>
+
+      {/* Category Dialog */}
+      <Dialog open={categoryDialog.open} onOpenChange={(open) => setCategoryDialog({ ...categoryDialog, open })}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{categoryDialog.mode === "add" ? "Add Category" : "Edit Category"}</DialogTitle>
+            <DialogDescription>
+              {categoryDialog.mode === "add" ? "Create a new category for organizing items." : "Update category details."}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label htmlFor="category-name">Category Name</Label>
+              <Input
+                id="category-name"
+                value={categoryForm.name}
+                onChange={(e) => setCategoryForm({ name: e.target.value })}
+                placeholder="Enter category name"
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setCategoryDialog({ open: false, mode: "add" })}>
+              Cancel
+            </Button>
+            <Button onClick={categoryDialog.mode === "add" ? handleAddCategory : handleEditCategory}>
+              {categoryDialog.mode === "add" ? "Add" : "Save"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Item Dialog */}
+      <Dialog open={itemDialog.open} onOpenChange={(open) => setItemDialog({ ...itemDialog, open })}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{itemDialog.mode === "add" ? "Add Item" : "Edit Item"}</DialogTitle>
+            <DialogDescription>
+              {itemDialog.mode === "add" ? "Add a new item to the inventory." : "Update item details."}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label htmlFor="item-name">Item Name</Label>
+              <Input
+                id="item-name"
+                value={itemForm.name}
+                onChange={(e) => setItemForm({ ...itemForm, name: e.target.value })}
+                placeholder="Enter item name"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="item-quantity">Quantity</Label>
+              <Input
+                id="item-quantity"
+                type="number"
+                value={itemForm.quantity}
+                onChange={(e) => setItemForm({ ...itemForm, quantity: parseInt(e.target.value) || 0 })}
+                placeholder="Enter quantity"
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setItemDialog({ open: false, mode: "add" })}>
+              Cancel
+            </Button>
+            <Button onClick={itemDialog.mode === "add" ? handleAddItem : handleEditItem}>
+              {itemDialog.mode === "add" ? "Add" : "Save"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Batch Dialog */}
+      <Dialog open={batchDialog.open} onOpenChange={(open) => setBatchDialog({ ...batchDialog, open })}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Add Batch</DialogTitle>
+            <DialogDescription>Add a new batch with expiry tracking.</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label htmlFor="batch-number">Batch Number</Label>
+              <Input
+                id="batch-number"
+                value={batchForm.batchNumber}
+                onChange={(e) => setBatchForm({ ...batchForm, batchNumber: e.target.value })}
+                placeholder="Enter batch number"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="batch-quantity">Quantity</Label>
+              <Input
+                id="batch-quantity"
+                type="number"
+                value={batchForm.quantity}
+                onChange={(e) => setBatchForm({ ...batchForm, quantity: parseInt(e.target.value) || 0 })}
+                placeholder="Enter quantity"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="batch-expiry">Expiry Date</Label>
+              <Input
+                id="batch-expiry"
+                type="date"
+                value={batchForm.expiryDate}
+                onChange={(e) => setBatchForm({ ...batchForm, expiryDate: e.target.value })}
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setBatchDialog({ open: false })}>
+              Cancel
+            </Button>
+            <Button onClick={handleAddBatch}>Add Batch</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete Confirmation Dialog */}
+      <AlertDialog open={deleteDialog.open} onOpenChange={(open) => setDeleteDialog({ ...deleteDialog, open })}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Are you sure?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This action cannot be undone. This will permanently delete the {deleteDialog.type}.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => {
+                if (deleteDialog.type === "category") handleDeleteCategory();
+                else if (deleteDialog.type === "item") handleDeleteItem();
+              }}
+            >
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
