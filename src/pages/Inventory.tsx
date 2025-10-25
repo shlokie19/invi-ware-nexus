@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { ChevronDown, ChevronRight, Plus, Edit, Trash2 } from "lucide-react";
+import { ChevronDown, ChevronRight, Plus, Edit, Trash2, TrendingUp, TrendingDown, Minus } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 
 interface Batch {
@@ -18,6 +18,10 @@ interface Item {
   status: "normal" | "low";
   lastUpdated: string;
   batches: Batch[];
+  predictedStock: number;
+  predictionTrend: "increasing" | "decreasing" | "stable";
+  predictionConfidence: number;
+  predictedStatus: "normal" | "low";
 }
 
 interface Subcategory {
@@ -51,6 +55,10 @@ const mockData: Category[] = [
               { id: "b1", batchNumber: "BATCH-001", quantity: 25, expiryDate: "2025-12-31" },
               { id: "b2", batchNumber: "BATCH-002", quantity: 20, expiryDate: "2026-01-15" },
             ],
+            predictedStock: 38,
+            predictionTrend: "decreasing",
+            predictionConfidence: 92,
+            predictedStatus: "normal",
           },
           {
             id: "1-1-2",
@@ -59,6 +67,10 @@ const mockData: Category[] = [
             status: "low",
             lastUpdated: "5 hours ago",
             batches: [{ id: "b3", batchNumber: "BATCH-003", quantity: 12, expiryDate: "2025-11-20" }],
+            predictedStock: 6,
+            predictionTrend: "decreasing",
+            predictionConfidence: 88,
+            predictedStatus: "low",
           },
         ],
       },
@@ -73,6 +85,10 @@ const mockData: Category[] = [
             status: "normal",
             lastUpdated: "1 day ago",
             batches: [{ id: "b4", batchNumber: "BATCH-004", quantity: 30, expiryDate: "2026-03-01" }],
+            predictedStock: 35,
+            predictionTrend: "increasing",
+            predictionConfidence: 85,
+            predictedStatus: "normal",
           },
         ],
       },
@@ -96,6 +112,10 @@ const mockData: Category[] = [
               { id: "b5", batchNumber: "BATCH-005", quantity: 300, expiryDate: "2025-06-15" },
               { id: "b6", batchNumber: "BATCH-006", quantity: 200, expiryDate: "2025-07-20" },
             ],
+            predictedStock: 485,
+            predictionTrend: "stable",
+            predictionConfidence: 95,
+            predictedStatus: "normal",
           },
         ],
       },
@@ -227,7 +247,7 @@ export default function Inventory() {
                                   <ChevronRight className="h-4 w-4" />
                                 )}
                                 <div className="flex-1">
-                                  <div className="flex items-center gap-2">
+                                  <div className="flex items-center gap-2 flex-wrap">
                                     <span className="font-medium">{item.name}</span>
                                     <Badge
                                       variant={item.status === "low" ? "destructive" : "secondary"}
@@ -235,9 +255,31 @@ export default function Inventory() {
                                     >
                                       {item.status === "low" ? "Low Stock" : "Normal"}
                                     </Badge>
+                                    {item.predictedStatus === "low" && (
+                                      <Badge variant="outline" className="text-xs border-warning text-warning">
+                                        Predicted Low Stock
+                                      </Badge>
+                                    )}
                                   </div>
-                                  <div className="text-sm text-muted-foreground">
-                                    Quantity: {item.quantity} • Updated {item.lastUpdated}
+                                  <div className="text-sm text-muted-foreground space-y-1">
+                                    <div>Quantity: {item.quantity} • Updated {item.lastUpdated}</div>
+                                    <div className="flex items-center gap-2">
+                                      <span className="font-medium text-primary">
+                                        ML Prediction: {item.predictedStock} units (7d)
+                                      </span>
+                                      {item.predictionTrend === "increasing" && (
+                                        <TrendingUp className="h-3 w-3 text-success" />
+                                      )}
+                                      {item.predictionTrend === "decreasing" && (
+                                        <TrendingDown className="h-3 w-3 text-warning" />
+                                      )}
+                                      {item.predictionTrend === "stable" && (
+                                        <Minus className="h-3 w-3 text-muted-foreground" />
+                                      )}
+                                      <Badge variant="secondary" className="text-xs">
+                                        {item.predictionConfidence}% confidence
+                                      </Badge>
+                                    </div>
                                   </div>
                                 </div>
                               </div>

@@ -1,6 +1,8 @@
+import { useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { LineChart, Line, AreaChart, Area, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from "recharts";
 
 const predictionData = [
@@ -31,7 +33,56 @@ const reorderPatterns = [
   { week: "Week 4", electronics: 61, food: 71, clothing: 51 },
 ];
 
+const itemSpecificData: Record<string, any[]> = {
+  "1-1-1": [ // iPhone 15 Pro
+    { date: "Oct 18", actual: 52, predicted: 51 },
+    { date: "Oct 19", actual: 48, predicted: 49 },
+    { date: "Oct 20", actual: 47, predicted: 46 },
+    { date: "Oct 21", actual: 45, predicted: 45 },
+    { date: "Oct 22", predicted: 42 },
+    { date: "Oct 23", predicted: 40 },
+    { date: "Oct 24", predicted: 38 },
+  ],
+  "1-1-2": [ // Samsung Galaxy S24
+    { date: "Oct 18", actual: 18, predicted: 17 },
+    { date: "Oct 19", actual: 15, predicted: 16 },
+    { date: "Oct 20", actual: 14, predicted: 13 },
+    { date: "Oct 21", actual: 12, predicted: 12 },
+    { date: "Oct 22", predicted: 10 },
+    { date: "Oct 23", predicted: 8 },
+    { date: "Oct 24", predicted: 6 },
+  ],
+  "1-2-1": [ // MacBook Pro 16
+    { date: "Oct 18", actual: 28, predicted: 29 },
+    { date: "Oct 19", actual: 29, predicted: 28 },
+    { date: "Oct 20", actual: 30, predicted: 30 },
+    { date: "Oct 21", actual: 30, predicted: 31 },
+    { date: "Oct 22", predicted: 32 },
+    { date: "Oct 23", predicted: 34 },
+    { date: "Oct 24", predicted: 35 },
+  ],
+  "2-1-1": [ // Bottled Water
+    { date: "Oct 18", actual: 505, predicted: 502 },
+    { date: "Oct 19", actual: 502, predicted: 501 },
+    { date: "Oct 20", actual: 500, predicted: 500 },
+    { date: "Oct 21", actual: 500, predicted: 498 },
+    { date: "Oct 22", predicted: 495 },
+    { date: "Oct 23", predicted: 490 },
+    { date: "Oct 24", predicted: 485 },
+  ],
+};
+
+const items = [
+  { id: "1-1-1", name: "iPhone 15 Pro", subcategory: "Smartphones" },
+  { id: "1-1-2", name: "Samsung Galaxy S24", subcategory: "Smartphones" },
+  { id: "1-2-1", name: "MacBook Pro 16", subcategory: "Laptops" },
+  { id: "2-1-1", name: "Bottled Water", subcategory: "Beverages" },
+];
+
 export default function Analytics() {
+  const [selectedItem, setSelectedItem] = useState<string>("1-1-1");
+  const selectedItemData = itemSpecificData[selectedItem] || itemSpecificData["1-1-1"];
+  const selectedItemInfo = items.find(item => item.id === selectedItem) || items[0];
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -55,14 +106,30 @@ export default function Analytics() {
         <TabsContent value="prediction" className="space-y-4">
           <Card className="border-primary/20">
             <CardHeader>
-              <CardTitle>Stock Level Prediction (ML Model)</CardTitle>
-              <p className="text-sm text-muted-foreground">
-                7-day forecast using LSTM neural network
-              </p>
+              <div className="flex items-start justify-between">
+                <div className="space-y-1">
+                  <CardTitle>Item-Specific Stock Prediction</CardTitle>
+                  <p className="text-sm text-muted-foreground">
+                    7-day forecast using LSTM neural network • API: /predict/&#123;item_id&#125;
+                  </p>
+                </div>
+                <Select value={selectedItem} onValueChange={setSelectedItem}>
+                  <SelectTrigger className="w-[280px]">
+                    <SelectValue placeholder="Select item" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {items.map((item) => (
+                      <SelectItem key={item.id} value={item.id}>
+                        {item.name} ({item.subcategory})
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
             </CardHeader>
             <CardContent>
               <ResponsiveContainer width="100%" height={400}>
-                <AreaChart data={predictionData}>
+                <AreaChart data={selectedItemData}>
                   <defs>
                     <linearGradient id="colorActual" x1="0" y1="0" x2="0" y2="1">
                       <stop offset="5%" stopColor="hsl(var(--primary))" stopOpacity={0.8} />
@@ -107,34 +174,38 @@ export default function Analytics() {
             <Card className="border-success/20 bg-success/5">
               <CardHeader>
                 <CardTitle className="text-sm font-medium text-muted-foreground">
-                  Prediction Accuracy
+                  Item Prediction Accuracy
                 </CardTitle>
               </CardHeader>
               <CardContent>
                 <div className="text-3xl font-bold text-success">94.2%</div>
-                <p className="text-xs text-muted-foreground mt-1">Last 30 days</p>
+                <p className="text-xs text-muted-foreground mt-1">{selectedItemInfo.name}</p>
               </CardContent>
             </Card>
             <Card className="border-primary/20 bg-primary/5">
               <CardHeader>
                 <CardTitle className="text-sm font-medium text-muted-foreground">
-                  Forecast Confidence
+                  Current Stock
                 </CardTitle>
               </CardHeader>
               <CardContent>
-                <div className="text-3xl font-bold text-primary">89%</div>
-                <p className="text-xs text-muted-foreground mt-1">Next 7 days</p>
+                <div className="text-3xl font-bold text-primary">
+                  {selectedItemData.find(d => d.actual)?.actual || "N/A"}
+                </div>
+                <p className="text-xs text-muted-foreground mt-1">Units available</p>
               </CardContent>
             </Card>
             <Card className="border-warning/20 bg-warning/5">
               <CardHeader>
                 <CardTitle className="text-sm font-medium text-muted-foreground">
-                  Model Last Updated
+                  7-Day Forecast
                 </CardTitle>
               </CardHeader>
               <CardContent>
-                <div className="text-3xl font-bold text-warning">2h ago</div>
-                <p className="text-xs text-muted-foreground mt-1">Auto-retrained daily</p>
+                <div className="text-3xl font-bold text-warning">
+                  {selectedItemData[selectedItemData.length - 1]?.predicted || "N/A"}
+                </div>
+                <p className="text-xs text-muted-foreground mt-1">Predicted units</p>
               </CardContent>
             </Card>
           </div>
