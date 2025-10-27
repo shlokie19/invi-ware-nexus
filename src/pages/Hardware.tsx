@@ -1,8 +1,17 @@
+import { useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Activity, Gauge, AlertCircle } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { useToast } from "@/hooks/use-toast";
 
 const sensorData = [
   { time: "10:00", weight: 245, threshold: 250 },
@@ -14,7 +23,17 @@ const sensorData = [
   { time: "11:30", weight: 225, threshold: 250 },
 ];
 
-const hardwareStatus = [
+interface Sensor {
+  id: string;
+  name: string;
+  location: string;
+  status: "warning" | "normal";
+  currentWeight: number;
+  expectedWeight: number;
+  lastReading: string;
+}
+
+const initialHardwareStatus: Sensor[] = [
   {
     id: "sensor-1",
     name: "Weight Sensor Alpha",
@@ -45,6 +64,27 @@ const hardwareStatus = [
 ];
 
 export default function Hardware() {
+  const { toast } = useToast();
+  const [hardwareStatus, setHardwareStatus] = useState<Sensor[]>(initialHardwareStatus);
+  const [detailsDialog, setDetailsDialog] = useState<{ open: boolean; sensor?: Sensor }>({ open: false });
+
+  const handleAcknowledge = (sensorId: string) => {
+    setHardwareStatus(prev => 
+      prev.map(sensor => 
+        sensor.id === sensorId ? { ...sensor, status: "normal" as const } : sensor
+      )
+    );
+    toast({ 
+      title: "Alert Acknowledged", 
+      description: "Sensor status has been updated to normal." 
+    });
+  };
+
+  const handleViewDetails = (sensor: Sensor) => {
+    setDetailsDialog({ open: true, sensor });
+  };
+
+  const activeAlerts = hardwareStatus.filter(s => s.status === "warning").length;
   return (
     <div className="space-y-6">
       <div>
@@ -74,7 +114,7 @@ export default function Hardware() {
             <AlertCircle className="h-5 w-5 text-warning" />
           </CardHeader>
           <CardContent>
-            <div className="text-3xl font-bold text-warning">1</div>
+            <div className="text-3xl font-bold text-warning">{activeAlerts}</div>
             <p className="text-xs text-muted-foreground mt-1">Requires attention</p>
           </CardContent>
         </Card>
@@ -175,10 +215,18 @@ export default function Hardware() {
                 </div>
                 {sensor.status === "warning" && (
                   <div className="flex gap-2">
-                    <Button size="sm" variant="outline">
+                    <Button 
+                      size="sm" 
+                      variant="outline"
+                      onClick={() => handleViewDetails(sensor)}
+                    >
                       View Details
                     </Button>
-                    <Button size="sm" className="bg-warning hover:bg-warning/90">
+                    <Button 
+                      size="sm" 
+                      className="bg-warning hover:bg-warning/90"
+                      onClick={() => handleAcknowledge(sensor.id)}
+                    >
                       Acknowledge
                     </Button>
                   </div>
@@ -199,6 +247,61 @@ export default function Hardware() {
           </Card>
         ))}
       </div>
+
+      {/* Details Dialog */}
+      <Dialog open={detailsDialog.open} onOpenChange={(open) => setDetailsDialog({ ...detailsDialog, open })}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{detailsDialog.sensor?.name}</DialogTitle>
+            <DialogDescription>Detailed sensor information and status</DialogDescription>
+          </DialogHeader>
+          {detailsDialog.sensor && (
+            <div className="space-y-4">
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <p className="text-sm text-muted-foreground">Location</p>
+                  <p className="font-medium">{detailsDialog.sensor.location}</p>
+                </div>
+                <div>
+                  <p className="text-sm text-muted-foreground">Status</p>
+                  <Badge variant={detailsDialog.sensor.status === "warning" ? "destructive" : "secondary"}>
+                    {detailsDialog.sensor.status === "warning" ? "Alert" : "Normal"}
+                  </Badge>
+                </div>
+                <div>
+                  <p className="text-sm text-muted-foreground">Current Weight</p>
+                  <p className="font-medium">{detailsDialog.sensor.currentWeight} kg</p>
+                </div>
+                <div>
+                  <p className="text-sm text-muted-foreground">Expected Weight</p>
+                  <p className="font-medium">{detailsDialog.sensor.expectedWeight} kg</p>
+                </div>
+                <div>
+                  <p className="text-sm text-muted-foreground">Weight Difference</p>
+                  <p className="font-medium text-warning">
+                    {detailsDialog.sensor.expectedWeight - detailsDialog.sensor.currentWeight} kg below threshold
+                  </p>
+                </div>
+                <div>
+                  <p className="text-sm text-muted-foreground">Last Reading</p>
+                  <p className="font-medium">{detailsDialog.sensor.lastReading}</p>
+                </div>
+              </div>
+              {detailsDialog.sensor.status === "warning" && (
+                <div className="p-3 rounded-lg bg-warning/10 border border-warning/20">
+                  <div className="flex items-start gap-2 text-sm">
+                    <AlertCircle className="h-4 w-4 text-warning mt-0.5" />
+                    <div>
+                      <p className="font-medium text-warning mb-1">Alert Details</p>
+                      <p>Weight has dropped below the expected threshold. This may indicate unauthorized item removal or sensor malfunction. The buzzer has been activated to alert nearby personnel.</p>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

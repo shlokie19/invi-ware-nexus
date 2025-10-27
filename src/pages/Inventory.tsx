@@ -153,12 +153,14 @@ export default function Inventory() {
 
   // Dialog states
   const [categoryDialog, setCategoryDialog] = useState<{ open: boolean; mode: "add" | "edit"; data?: Category }>({ open: false, mode: "add" });
+  const [subcategoryDialog, setSubcategoryDialog] = useState<{ open: boolean; mode: "add" | "edit"; categoryId?: string; data?: Subcategory }>({ open: false, mode: "add" });
   const [itemDialog, setItemDialog] = useState<{ open: boolean; mode: "add" | "edit"; categoryId?: string; subcategoryId?: string; data?: Item }>({ open: false, mode: "add" });
   const [batchDialog, setBatchDialog] = useState<{ open: boolean; categoryId?: string; subcategoryId?: string; itemId?: string }>({ open: false });
   const [deleteDialog, setDeleteDialog] = useState<{ open: boolean; type?: "category" | "subcategory" | "item"; id?: string; parentId?: string; subParentId?: string }>({ open: false });
 
   // Form states
   const [categoryForm, setCategoryForm] = useState({ name: "" });
+  const [subcategoryForm, setSubcategoryForm] = useState({ name: "" });
   const [itemForm, setItemForm] = useState({ name: "", quantity: 0 });
   const [batchForm, setBatchForm] = useState({ batchNumber: "", quantity: 0, expiryDate: "" });
 
@@ -209,6 +211,47 @@ export default function Inventory() {
     setCategories(categories.filter(cat => cat.id !== deleteDialog.id));
     setDeleteDialog({ open: false });
     toast({ title: "Category deleted successfully" });
+  };
+
+  const handleAddSubcategory = () => {
+    if (!subcategoryForm.name.trim() || !subcategoryDialog.categoryId) return;
+    const newSubcategory: Subcategory = {
+      id: Date.now().toString(),
+      name: subcategoryForm.name,
+      items: [],
+    };
+    setCategories(categories.map(cat => 
+      cat.id === subcategoryDialog.categoryId ? {
+        ...cat,
+        subcategories: [...cat.subcategories, newSubcategory]
+      } : cat
+    ));
+    setSubcategoryDialog({ open: false, mode: "add" });
+    setSubcategoryForm({ name: "" });
+    toast({ title: "Subcategory added successfully" });
+  };
+
+  const handleEditSubcategory = () => {
+    if (!subcategoryForm.name.trim() || !subcategoryDialog.data) return;
+    setCategories(categories.map(cat => ({
+      ...cat,
+      subcategories: cat.subcategories.map(sub =>
+        sub.id === subcategoryDialog.data!.id ? { ...sub, name: subcategoryForm.name } : sub
+      )
+    })));
+    setSubcategoryDialog({ open: false, mode: "add" });
+    setSubcategoryForm({ name: "" });
+    toast({ title: "Subcategory updated successfully" });
+  };
+
+  const handleDeleteSubcategory = () => {
+    if (!deleteDialog.id) return;
+    setCategories(categories.map(cat => ({
+      ...cat,
+      subcategories: cat.subcategories.filter(sub => sub.id !== deleteDialog.id)
+    })));
+    setDeleteDialog({ open: false });
+    toast({ title: "Subcategory deleted successfully" });
   };
 
   const handleAddItem = () => {
@@ -368,6 +411,17 @@ export default function Inventory() {
 
             {expandedCategories.includes(category.id) && (
               <CardContent className="space-y-3">
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => {
+                    setSubcategoryForm({ name: "" });
+                    setSubcategoryDialog({ open: true, mode: "add", categoryId: category.id });
+                  }}
+                >
+                  <Plus className="h-4 w-4 mr-2" />
+                  Add Subcategory
+                </Button>
                 {category.subcategories.map((subcategory) => (
                   <Card key={subcategory.id} className="border-secondary">
                     <CardHeader
@@ -396,6 +450,27 @@ export default function Inventory() {
                           >
                             <Plus className="h-3 w-3 mr-1" />
                             Add Item
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setSubcategoryForm({ name: subcategory.name });
+                              setSubcategoryDialog({ open: true, mode: "edit", data: subcategory });
+                            }}
+                          >
+                            <Edit className="h-3 w-3" />
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setDeleteDialog({ open: true, type: "subcategory", id: subcategory.id });
+                            }}
+                          >
+                            <Trash2 className="h-3 w-3" />
                           </Button>
                         </div>
                       </div>
@@ -555,6 +630,37 @@ export default function Inventory() {
         </DialogContent>
       </Dialog>
 
+      {/* Subcategory Dialog */}
+      <Dialog open={subcategoryDialog.open} onOpenChange={(open) => setSubcategoryDialog({ ...subcategoryDialog, open })}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{subcategoryDialog.mode === "add" ? "Add Subcategory" : "Edit Subcategory"}</DialogTitle>
+            <DialogDescription>
+              {subcategoryDialog.mode === "add" ? "Create a new subcategory" : "Update subcategory details"}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label htmlFor="subcategory-name">Subcategory Name</Label>
+              <Input
+                id="subcategory-name"
+                value={subcategoryForm.name}
+                onChange={(e) => setSubcategoryForm({ name: e.target.value })}
+                placeholder="e.g., Smartphones"
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setSubcategoryDialog({ open: false, mode: "add" })}>
+              Cancel
+            </Button>
+            <Button onClick={subcategoryDialog.mode === "add" ? handleAddSubcategory : handleEditSubcategory}>
+              {subcategoryDialog.mode === "add" ? "Add" : "Update"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       {/* Item Dialog */}
       <Dialog open={itemDialog.open} onOpenChange={(open) => setItemDialog({ ...itemDialog, open })}>
         <DialogContent>
@@ -656,6 +762,7 @@ export default function Inventory() {
             <AlertDialogAction
               onClick={() => {
                 if (deleteDialog.type === "category") handleDeleteCategory();
+                else if (deleteDialog.type === "subcategory") handleDeleteSubcategory();
                 else if (deleteDialog.type === "item") handleDeleteItem();
               }}
             >
