@@ -4,6 +4,8 @@ import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { LineChart, Line, AreaChart, Area, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from "recharts";
+import { useToast } from "@/hooks/use-toast";
+import { Download } from "lucide-react";
 
 const predictionData = [
   { date: "Oct 18", actual: 850, predicted: 845 },
@@ -81,8 +83,69 @@ const items = [
 
 export default function Analytics() {
   const [selectedItem, setSelectedItem] = useState<string>("1-1-1");
+  const { toast } = useToast();
   const selectedItemData = itemSpecificData[selectedItem] || itemSpecificData["1-1-1"];
   const selectedItemInfo = items.find(item => item.id === selectedItem) || items[0];
+
+  const handleExportReport = () => {
+    try {
+      // Compile all analytics data
+      const report = {
+        generatedAt: new Date().toISOString(),
+        selectedItem: selectedItemInfo.name,
+        stockPredictions: selectedItemData,
+        categoryPerformance,
+        reorderPatterns,
+        allItemPredictions: itemSpecificData
+      };
+
+      // Convert to CSV format
+      let csvContent = "Analytics Report\n";
+      csvContent += `Generated: ${new Date().toLocaleString()}\n\n`;
+      
+      // Stock Predictions for Selected Item
+      csvContent += `Stock Predictions - ${selectedItemInfo.name}\n`;
+      csvContent += "Date,Actual Stock,Predicted Stock\n";
+      selectedItemData.forEach(row => {
+        csvContent += `${row.date},${row.actual || ""},${row.predicted}\n`;
+      });
+      
+      csvContent += "\n\nCategory Performance\n";
+      csvContent += "Category,Sales (₹),Growth (%)\n";
+      categoryPerformance.forEach(row => {
+        csvContent += `${row.category},${row.sales},${row.growth}\n`;
+      });
+      
+      csvContent += "\n\nReorder Patterns\n";
+      csvContent += "Week,Electronics,Food Items,Clothing\n";
+      reorderPatterns.forEach(row => {
+        csvContent += `${row.week},${row.electronics},${row.food},${row.clothing}\n`;
+      });
+
+      // Create blob and download
+      const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+      const link = document.createElement("a");
+      const url = URL.createObjectURL(blob);
+      link.setAttribute("href", url);
+      link.setAttribute("download", `analytics-report-${new Date().toISOString().split('T')[0]}.csv`);
+      link.style.visibility = "hidden";
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+
+      toast({
+        title: "Report Exported",
+        description: "Analytics report has been downloaded successfully.",
+      });
+    } catch (error) {
+      toast({
+        title: "Export Failed",
+        description: "Failed to export analytics report. Please try again.",
+        variant: "destructive",
+      });
+    }
+  };
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -90,10 +153,10 @@ export default function Analytics() {
           <h1 className="text-3xl font-bold">Analytics Dashboard</h1>
           <p className="text-muted-foreground">ML-driven insights and predictions</p>
         </div>
-        <div className="flex gap-2">
-          <Button variant="outline">Export Report</Button>
-          <Button className="bg-primary hover:bg-primary/90">Refresh Data</Button>
-        </div>
+        <Button variant="outline" onClick={handleExportReport}>
+          <Download className="mr-2 h-4 w-4" />
+          Export Report
+        </Button>
       </div>
 
       <Tabs defaultValue="prediction" className="space-y-4">
