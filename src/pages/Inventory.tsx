@@ -30,7 +30,8 @@ const RETRAIN_ENDPOINT = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/trig
 
 const triggerModelRetrain = async (itemId: string, action: 'add' | 'update' | 'delete') => {
   try {
-    const response = await fetch(RETRAIN_ENDPOINT, {
+    // Call edge function
+    const edgeFunctionResponse = await fetch(RETRAIN_ENDPOINT, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -38,8 +39,25 @@ const triggerModelRetrain = async (itemId: string, action: 'add' | 'update' | 'd
       body: JSON.stringify({ itemId, action }),
     });
     
-    if (!response.ok) {
-      console.error('Failed to trigger model retrain');
+    if (!edgeFunctionResponse.ok) {
+      console.error('Failed to trigger model retrain via edge function');
+    }
+
+    // Also call Flask backend directly to retrain ML model
+    const flaskResponse = await fetch(`${FLASK_BASE_URL}/train-ml`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ 
+        item_id: itemId, 
+        action,
+        timestamp: new Date().toISOString()
+      }),
+    });
+    
+    if (!flaskResponse.ok) {
+      console.error('Failed to trigger ML retraining on Flask backend');
     }
   } catch (error) {
     console.error('Error triggering model retrain:', error);
