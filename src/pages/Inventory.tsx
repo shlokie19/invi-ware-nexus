@@ -25,6 +25,27 @@ import {
 } from "@/components/ui/alert-dialog";
 import { useToast } from "@/hooks/use-toast";
 
+const FLASK_BASE_URL = "http://localhost:5000";
+const RETRAIN_ENDPOINT = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/trigger-model-retrain`;
+
+const triggerModelRetrain = async (itemId: string, action: 'add' | 'update' | 'delete') => {
+  try {
+    const response = await fetch(RETRAIN_ENDPOINT, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ itemId, action }),
+    });
+    
+    if (!response.ok) {
+      console.error('Failed to trigger model retrain');
+    }
+  } catch (error) {
+    console.error('Error triggering model retrain:', error);
+  }
+};
+
 interface Batch {
   id: string;
   batchNumber: string;
@@ -281,17 +302,23 @@ export default function Inventory() {
     ));
     setItemDialog({ open: false, mode: "add" });
     setItemForm({ name: "", quantity: 0 });
+    
+    // Trigger ML model retraining
+    triggerModelRetrain(newItem.id, 'add');
+    
     toast({ title: "Item added successfully" });
   };
 
   const handleEditItem = () => {
     if (!itemForm.name.trim() || !itemDialog.data) return;
+    const itemId = itemDialog.data.id;
+    
     setCategories(categories.map(cat => ({
       ...cat,
       subcategories: cat.subcategories.map(sub => ({
         ...sub,
         items: sub.items.map(item =>
-          item.id === itemDialog.data!.id ? {
+          item.id === itemId ? {
             ...item,
             name: itemForm.name,
             quantity: itemForm.quantity,
@@ -302,19 +329,29 @@ export default function Inventory() {
     })));
     setItemDialog({ open: false, mode: "add" });
     setItemForm({ name: "", quantity: 0 });
+    
+    // Trigger ML model retraining
+    triggerModelRetrain(itemId, 'update');
+    
     toast({ title: "Item updated successfully" });
   };
 
   const handleDeleteItem = () => {
     if (!deleteDialog.id) return;
+    const itemId = deleteDialog.id;
+    
     setCategories(categories.map(cat => ({
       ...cat,
       subcategories: cat.subcategories.map(sub => ({
         ...sub,
-        items: sub.items.filter(item => item.id !== deleteDialog.id)
+        items: sub.items.filter(item => item.id !== itemId)
       }))
     })));
     setDeleteDialog({ open: false });
+    
+    // Trigger ML model retraining
+    triggerModelRetrain(itemId, 'delete');
+    
     toast({ title: "Item deleted successfully" });
   };
 

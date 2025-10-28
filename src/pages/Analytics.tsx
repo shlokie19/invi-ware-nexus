@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -6,6 +6,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { LineChart, Line, AreaChart, Area, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from "recharts";
 import { useToast } from "@/hooks/use-toast";
 import { Download } from "lucide-react";
+
+const FLASK_BASE_URL = "http://localhost:5000";
 
 const predictionData = [
   { date: "Oct 18", actual: 850, predicted: 845 },
@@ -84,8 +86,41 @@ const items = [
 export default function Analytics() {
   const [selectedItem, setSelectedItem] = useState<string>("1-1-1");
   const { toast } = useToast();
-  const selectedItemData = itemSpecificData[selectedItem] || itemSpecificData["1-1-1"];
+  const [liveItemData, setLiveItemData] = useState<any[]>([]);
+  const [isLoadingPrediction, setIsLoadingPrediction] = useState(false);
+  
+  const selectedItemData = liveItemData.length > 0 ? liveItemData : (itemSpecificData[selectedItem] || itemSpecificData["1-1-1"]);
   const selectedItemInfo = items.find(item => item.id === selectedItem) || items[0];
+
+  // Fetch live prediction from Flask backend
+  useEffect(() => {
+    const fetchPrediction = async () => {
+      setIsLoadingPrediction(true);
+      try {
+        const response = await fetch(`${FLASK_BASE_URL}/predict/${selectedItem}`);
+        
+        if (response.ok) {
+          const data = await response.json();
+          // Transform Flask response to match our chart data format
+          if (data.predictions && Array.isArray(data.predictions)) {
+            setLiveItemData(data.predictions);
+          }
+        } else {
+          console.error('Failed to fetch predictions from Flask backend');
+          // Fall back to static data
+          setLiveItemData([]);
+        }
+      } catch (error) {
+        console.error('Error fetching predictions:', error);
+        // Fall back to static data on error
+        setLiveItemData([]);
+      } finally {
+        setIsLoadingPrediction(false);
+      }
+    };
+
+    fetchPrediction();
+  }, [selectedItem]);
 
   const handleExportReport = () => {
     try {
@@ -171,7 +206,15 @@ export default function Analytics() {
             <CardHeader>
               <div className="flex items-start justify-between">
                 <div className="space-y-1">
-                  <CardTitle>Item-Specific Stock Prediction</CardTitle>
+                  <CardTitle className="flex items-center gap-2">
+                    Item-Specific Stock Prediction
+                    {liveItemData.length > 0 && (
+                      <span className="text-xs font-normal text-success">🔴 Live from Flask API</span>
+                    )}
+                    {isLoadingPrediction && (
+                      <span className="text-xs font-normal text-muted-foreground">Loading...</span>
+                    )}
+                  </CardTitle>
                   <p className="text-sm text-muted-foreground">
                     7-day forecast using LSTM neural network • API: /predict/&#123;item_id&#125;
                   </p>
