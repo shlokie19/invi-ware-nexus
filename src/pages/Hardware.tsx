@@ -1,7 +1,7 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Activity, Gauge, AlertCircle } from "lucide-react";
+import { Activity, Gauge, AlertCircle, Bell } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
 import {
@@ -31,17 +31,19 @@ interface Sensor {
   currentWeight: number;
   expectedWeight: number;
   lastReading: string;
+  isLive?: boolean;
 }
 
 const initialHardwareStatus: Sensor[] = [
   {
     id: "sensor-1",
-    name: "Weight Sensor Alpha",
+    name: "Smartwatch - Weight Sensor",
     location: "Shelf A-12, Electronics Section",
-    status: "warning",
-    currentWeight: 225,
+    status: "normal",
+    currentWeight: 250,
     expectedWeight: 250,
-    lastReading: "2 min ago",
+    lastReading: "Just now",
+    isLive: true,
   },
   {
     id: "sensor-2",
@@ -67,6 +69,57 @@ export default function Hardware() {
   const { toast } = useToast();
   const [hardwareStatus, setHardwareStatus] = useState<Sensor[]>(initialHardwareStatus);
   const [detailsDialog, setDetailsDialog] = useState<{ open: boolean; sensor?: Sensor }>({ open: false });
+  const [alertActive, setAlertActive] = useState(false);
+  const [liveData, setLiveData] = useState<{ weight: number; timestamp: string } | null>(null);
+
+  // Fetch live hardware data from Flask backend
+  useEffect(() => {
+    const fetchHardwareData = async () => {
+      try {
+        // Replace with your Flask backend URL
+        const response = await fetch('http://localhost:5000/get_hardware_data');
+        const data = await response.json();
+        
+        setLiveData({
+          weight: data.weight || 250,
+          timestamp: new Date().toLocaleTimeString(),
+        });
+
+        // Update the live sensor with real data
+        setHardwareStatus(prev => 
+          prev.map(sensor => {
+            if (sensor.isLive) {
+              const currentWeight = data.weight || 250;
+              const weightDrop = sensor.expectedWeight - currentWeight;
+              const isAlert = weightDrop > 20; // Alert if weight drops more than 20kg
+              
+              if (isAlert && !alertActive) {
+                setAlertActive(true);
+              }
+              
+              return {
+                ...sensor,
+                currentWeight,
+                status: isAlert ? "warning" : "normal",
+                lastReading: "Just now",
+              };
+            }
+            return sensor;
+          })
+        );
+      } catch (error) {
+        console.error('Failed to fetch hardware data:', error);
+      }
+    };
+
+    // Initial fetch
+    fetchHardwareData();
+
+    // Poll every 5 seconds
+    const interval = setInterval(fetchHardwareData, 5000);
+
+    return () => clearInterval(interval);
+  }, [alertActive]);
 
   const handleAcknowledge = (sensorId: string) => {
     setHardwareStatus(prev => 
@@ -74,6 +127,7 @@ export default function Hardware() {
         sensor.id === sensorId ? { ...sensor, status: "normal" as const } : sensor
       )
     );
+    setAlertActive(false);
     toast({ 
       title: "Alert Acknowledged", 
       description: "Sensor status has been updated to normal." 
@@ -85,8 +139,22 @@ export default function Hardware() {
   };
 
   const activeAlerts = hardwareStatus.filter(s => s.status === "warning").length;
+  
   return (
     <div className="space-y-6">
+      {/* Alert Banner */}
+      {alertActive && (
+        <div className="bg-destructive text-destructive-foreground p-4 rounded-lg border-2 border-destructive animate-pulse">
+          <div className="flex items-center gap-3">
+            <Bell className="h-6 w-6 animate-bounce" />
+            <div>
+              <h3 className="font-bold text-lg">⚠️ ALERT: Weight Drop Detected!</h3>
+              <p className="text-sm">Live hardware sensor on Smartwatch detected unauthorized item removal. Buzzer activated.</p>
+            </div>
+          </div>
+        </div>
+      )}
+
       <div>
         <h1 className="text-3xl font-bold">Hardware Status Monitor</h1>
         <p className="text-muted-foreground">Real-time sensor data and Arduino integration</p>
@@ -186,6 +254,11 @@ export default function Hardware() {
                 <div className="flex-1">
                   <div className="flex items-center gap-2 mb-2">
                     <h3 className="font-semibold">{sensor.name}</h3>
+                    {sensor.isLive && (
+                      <Badge variant="outline" className="bg-primary/10 text-primary border-primary">
+                        🔴 Connected to Live Hardware
+                      </Badge>
+                    )}
                     <Badge
                       variant={sensor.status === "warning" ? "destructive" : "secondary"}
                       className={
@@ -233,12 +306,12 @@ export default function Hardware() {
                 )}
               </div>
               {sensor.status === "warning" && (
-                <div className="mt-4 p-3 rounded-lg bg-warning/10 border border-warning/20">
+                <div className="mt-4 p-3 rounded-lg bg-warning/10 border border-warning/20 animate-pulse">
                   <div className="flex items-center gap-2 text-sm">
-                    <AlertCircle className="h-4 w-4 text-warning" />
+                    <AlertCircle className="h-4 w-4 text-warning animate-bounce" />
                     <span>
                       <strong>Alert:</strong> Weight dropped below threshold. Possible unauthorized
-                      item removal detected. Buzzer activated.
+                      item removal detected. {sensor.isLive && "🔔 Buzzer activated on live hardware."}
                     </span>
                   </div>
                 </div>
