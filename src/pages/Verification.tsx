@@ -28,22 +28,23 @@ export default function Verification() {
     if (!selectedFile) return;
 
     setIsVerifying(true);
-    // Simulate API call
-    await new Promise((resolve) => setTimeout(resolve, 2000));
-
-    // Mock result
-    const mockResult = {
-      status: Math.random() > 0.5 ? "authentic" : "fake",
-      confidence: Math.floor(Math.random() * 30) + 70,
-    } as { status: "authentic" | "fake"; confidence: number };
-
-    setResult(mockResult);
-    setIsVerifying(false);
-
-    toast({
-      title: "Verification Complete",
-      description: `Product detected as ${mockResult.status} with ${mockResult.confidence}% confidence`,
-    });
+    
+    try {
+      // TODO: Implement actual verification API call
+      toast({
+        title: "Verification Not Available",
+        description: "Product verification service is not configured yet.",
+        variant: "destructive",
+      });
+    } catch (error) {
+      toast({
+        title: "Verification Failed",
+        description: "An error occurred during verification.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsVerifying(false);
+    }
   };
 
   return (

@@ -13,64 +13,8 @@ interface Alert {
   resolved: boolean;
 }
 
-const mockAlerts: Alert[] = [
-  {
-    id: 1,
-    title: "Critical Low Stock Alert",
-    description: "Samsung Galaxy S24 stock has dropped below minimum threshold (12 units remaining)",
-    severity: "critical",
-    timestamp: "2024-10-25 14:30",
-    category: "Inventory",
-    resolved: false,
-  },
-  {
-    id: 2,
-    title: "Fake Product Detected",
-    description: "CNN verification system flagged product ID PRD-8821 as potentially counterfeit",
-    severity: "critical",
-    timestamp: "2024-10-25 13:15",
-    category: "Verification",
-    resolved: false,
-  },
-  {
-    id: 3,
-    title: "Weight Sensor Triggered",
-    description: "Unexpected weight change detected in Batch B-234 (Electronics section)",
-    severity: "warning",
-    timestamp: "2024-10-25 12:45",
-    category: "Hardware",
-    resolved: false,
-  },
-  {
-    id: 4,
-    title: "Batch Expiry Approaching",
-    description: "Batch BATCH-005 (Bottled Water) will expire in 7 days",
-    severity: "warning",
-    timestamp: "2024-10-25 10:00",
-    category: "Inventory",
-    resolved: false,
-  },
-  {
-    id: 5,
-    title: "Stock Prediction Update",
-    description: "ML model predicts 15% growth in Electronics category over next 7 days",
-    severity: "info",
-    timestamp: "2024-10-25 09:00",
-    category: "Analytics",
-    resolved: false,
-  },
-  {
-    id: 6,
-    title: "Unauthorized Access Attempt",
-    description: "Multiple failed login attempts detected from IP 192.168.1.105",
-    severity: "critical",
-    timestamp: "2024-10-24 18:20",
-    category: "Security",
-    resolved: true,
-  },
-];
-
 export default function Alerts() {
+  const alerts: Alert[] = [];
   const getSeverityIcon = (severity: string) => {
     switch (severity) {
       case "critical":
@@ -102,16 +46,23 @@ export default function Alerts() {
         </div>
         <div className="flex gap-2">
           <Badge variant="destructive" className="h-8">
-            {mockAlerts.filter((a) => a.severity === "critical" && !a.resolved).length} Critical
+            {alerts.filter((a) => a.severity === "critical" && !a.resolved).length} Critical
           </Badge>
           <Badge variant="outline" className="h-8 border-warning text-warning">
-            {mockAlerts.filter((a) => a.severity === "warning" && !a.resolved).length} Warning
+            {alerts.filter((a) => a.severity === "warning" && !a.resolved).length} Warning
           </Badge>
         </div>
       </div>
 
       <div className="space-y-4">
-        {mockAlerts.map((alert) => (
+        {alerts.length === 0 ? (
+          <Card className="border-primary/20">
+            <CardContent className="p-12 text-center">
+              <p className="text-muted-foreground">No alerts at this time</p>
+            </CardContent>
+          </Card>
+        ) : (
+          alerts.map((alert) => (
           <Card
             key={alert.id}
             className={`border-2 transition-all hover:shadow-lg ${
@@ -156,7 +107,8 @@ export default function Alerts() {
               </div>
             </CardContent>
           </Card>
-        ))}
+          ))
+        )}
       </div>
     </div>
   );

@@ -9,88 +9,17 @@ import { Download } from "lucide-react";
 
 const FLASK_BASE_URL = "http://localhost:5000";
 
-const predictionData = [
-  { date: "Oct 18", actual: 850, predicted: 845 },
-  { date: "Oct 19", actual: 920, predicted: 915 },
-  { date: "Oct 20", actual: 880, predicted: 890 },
-  { date: "Oct 21", actual: 950, predicted: 945 },
-  { date: "Oct 22", actual: 1020, predicted: 1010 },
-  { date: "Oct 23", actual: 980, predicted: 990 },
-  { date: "Oct 24", actual: 1050, predicted: 1045 },
-  { date: "Oct 25", predicted: 1100 },
-  { date: "Oct 26", predicted: 1150 },
-  { date: "Oct 27", predicted: 1120 },
-];
-
-const categoryPerformance = [
-  { category: "Electronics", sales: 45000, growth: 15 },
-  { category: "Food Items", sales: 38000, growth: 8 },
-  { category: "Clothing", sales: 32000, growth: 12 },
-  { category: "Medical", sales: 28000, growth: 6 },
-  { category: "Hardware", sales: 25000, growth: 10 },
-];
-
-const reorderPatterns = [
-  { week: "Week 1", electronics: 45, food: 62, clothing: 38 },
-  { week: "Week 2", electronics: 52, food: 58, clothing: 42 },
-  { week: "Week 3", electronics: 48, food: 65, clothing: 45 },
-  { week: "Week 4", electronics: 61, food: 71, clothing: 51 },
-];
-
-const itemSpecificData: Record<string, any[]> = {
-  "1-1-1": [ // iPhone 15 Pro
-    { date: "Oct 18", actual: 52, predicted: 51 },
-    { date: "Oct 19", actual: 48, predicted: 49 },
-    { date: "Oct 20", actual: 47, predicted: 46 },
-    { date: "Oct 21", actual: 45, predicted: 45 },
-    { date: "Oct 22", predicted: 42 },
-    { date: "Oct 23", predicted: 40 },
-    { date: "Oct 24", predicted: 38 },
-  ],
-  "1-1-2": [ // Samsung Galaxy S24
-    { date: "Oct 18", actual: 18, predicted: 17 },
-    { date: "Oct 19", actual: 15, predicted: 16 },
-    { date: "Oct 20", actual: 14, predicted: 13 },
-    { date: "Oct 21", actual: 12, predicted: 12 },
-    { date: "Oct 22", predicted: 10 },
-    { date: "Oct 23", predicted: 8 },
-    { date: "Oct 24", predicted: 6 },
-  ],
-  "1-2-1": [ // MacBook Pro 16
-    { date: "Oct 18", actual: 28, predicted: 29 },
-    { date: "Oct 19", actual: 29, predicted: 28 },
-    { date: "Oct 20", actual: 30, predicted: 30 },
-    { date: "Oct 21", actual: 30, predicted: 31 },
-    { date: "Oct 22", predicted: 32 },
-    { date: "Oct 23", predicted: 34 },
-    { date: "Oct 24", predicted: 35 },
-  ],
-  "2-1-1": [ // Bottled Water
-    { date: "Oct 18", actual: 505, predicted: 502 },
-    { date: "Oct 19", actual: 502, predicted: 501 },
-    { date: "Oct 20", actual: 500, predicted: 500 },
-    { date: "Oct 21", actual: 500, predicted: 498 },
-    { date: "Oct 22", predicted: 495 },
-    { date: "Oct 23", predicted: 490 },
-    { date: "Oct 24", predicted: 485 },
-  ],
-};
-
-const items = [
-  { id: "1-1-1", name: "iPhone 15 Pro", subcategory: "Smartphones" },
-  { id: "1-1-2", name: "Samsung Galaxy S24", subcategory: "Smartphones" },
-  { id: "1-2-1", name: "MacBook Pro 16", subcategory: "Laptops" },
-  { id: "2-1-1", name: "Bottled Water", subcategory: "Beverages" },
-];
-
 export default function Analytics() {
-  const [selectedItem, setSelectedItem] = useState<string>("1-1-1");
+  const [selectedItem, setSelectedItem] = useState<string>("");
   const { toast } = useToast();
   const [liveItemData, setLiveItemData] = useState<any[]>([]);
   const [isLoadingPrediction, setIsLoadingPrediction] = useState(false);
+  const [items, setItems] = useState<any[]>([]);
+  const [categoryPerformance, setCategoryPerformance] = useState<any[]>([]);
+  const [reorderPatterns, setReorderPatterns] = useState<any[]>([]);
   
-  const selectedItemData = liveItemData.length > 0 ? liveItemData : (itemSpecificData[selectedItem] || itemSpecificData["1-1-1"]);
-  const selectedItemInfo = items.find(item => item.id === selectedItem) || items[0];
+  const selectedItemData = liveItemData;
+  const selectedItemInfo = items.find(item => item.id === selectedItem);
 
   // Fetch live prediction from Flask backend
   useEffect(() => {
@@ -127,11 +56,10 @@ export default function Analytics() {
       // Compile all analytics data
       const report = {
         generatedAt: new Date().toISOString(),
-        selectedItem: selectedItemInfo.name,
+        selectedItem: selectedItemInfo?.name || "Unknown",
         stockPredictions: selectedItemData,
         categoryPerformance,
         reorderPatterns,
-        allItemPredictions: itemSpecificData
       };
 
       // Convert to CSV format
@@ -139,11 +67,13 @@ export default function Analytics() {
       csvContent += `Generated: ${new Date().toLocaleString()}\n\n`;
       
       // Stock Predictions for Selected Item
-      csvContent += `Stock Predictions - ${selectedItemInfo.name}\n`;
-      csvContent += "Date,Actual Stock,Predicted Stock\n";
-      selectedItemData.forEach(row => {
-        csvContent += `${row.date},${row.actual || ""},${row.predicted}\n`;
-      });
+      if (selectedItemInfo) {
+        csvContent += `Stock Predictions - ${selectedItemInfo.name}\n`;
+        csvContent += "Date,Actual Stock,Predicted Stock\n";
+        selectedItemData.forEach(row => {
+          csvContent += `${row.date},${row.actual || ""},${row.predicted}\n`;
+        });
+      }
       
       csvContent += "\n\nCategory Performance\n";
       csvContent += "Category,Sales (₹),Growth (%)\n";
@@ -285,7 +215,7 @@ export default function Analytics() {
               </CardHeader>
               <CardContent>
                 <div className="text-3xl font-bold text-success">94.2%</div>
-                <p className="text-xs text-muted-foreground mt-1">{selectedItemInfo.name}</p>
+                <p className="text-xs text-muted-foreground mt-1">{selectedItemInfo?.name || "N/A"}</p>
               </CardContent>
             </Card>
             <Card className="border-primary/20 bg-primary/5">

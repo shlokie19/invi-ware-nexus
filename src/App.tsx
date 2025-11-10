@@ -9,7 +9,6 @@ import Inventory from "./pages/Inventory";
 import Verification from "./pages/Verification";
 import Alerts from "./pages/Alerts";
 import Analytics from "./pages/Analytics";
-import Hardware from "./pages/Hardware";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -27,7 +26,6 @@ const App = () => (
             <Route path="/verification" element={<Verification />} />
             <Route path="/alerts" element={<Alerts />} />
             <Route path="/analytics" element={<Analytics />} />
-            <Route path="/hardware" element={<Hardware />} />
             <Route path="*" element={<NotFound />} />
           </Routes>
         </Layout>

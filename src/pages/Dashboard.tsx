@@ -7,118 +7,30 @@ import { useToast } from "@/hooks/use-toast";
 
 const FLASK_BASE_URL = "http://localhost:5000";
 
-// Fallback dummy data
-const fallbackStockData = [
-  { name: "Mon", stock: 450 },
-  { name: "Tue", stock: 420 },
-  { name: "Wed", stock: 390 },
-  { name: "Thu", stock: 370 },
-  { name: "Fri", stock: 340 },
-  { name: "Sat", stock: 310 },
-  { name: "Sun", stock: 290 },
-];
-
-const fallbackCategoryData = [
-  { name: "Electronics", items: 145 },
-  { name: "Food", items: 230 },
-  { name: "Clothing", items: 180 },
-  { name: "Medical", items: 95 },
-  { name: "Hardware", items: 120 },
-];
-
-const fallbackAlerts = [
-  { id: 1, message: "Low stock detected: Category Electronics", time: "5 min ago", severity: "warning" },
-  { id: 2, message: "Fake product detected in verification", time: "12 min ago", severity: "error" },
-  { id: 3, message: "Weight sensor triggered: Batch B-234", time: "1 hour ago", severity: "info" },
-];
-
 export default function Dashboard() {
-  const [stockData, setStockData] = useState(fallbackStockData);
-  const [categoryData, setCategoryData] = useState(fallbackCategoryData);
-  const [alerts, setAlerts] = useState(fallbackAlerts);
+  const [stockData, setStockData] = useState<any[]>([]);
+  const [categoryData, setCategoryData] = useState<any[]>([]);
+  const [alerts, setAlerts] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [totalItems, setTotalItems] = useState(770);
-  const [totalCategories, setTotalCategories] = useState(12);
-  const [lowStockAlerts, setLowStockAlerts] = useState(8);
-  const [predictedGrowth, setPredictedGrowth] = useState("+15%");
+  const [totalItems, setTotalItems] = useState(0);
+  const [totalCategories, setTotalCategories] = useState(0);
+  const [lowStockAlerts, setLowStockAlerts] = useState(0);
+  const [predictedGrowth, setPredictedGrowth] = useState("+0%");
   const { toast } = useToast();
-
-  // Sample item IDs for fetching predictions
-  const sampleItemIds = ["smartwatch-001", "laptop-002", "phone-003"];
 
   useEffect(() => {
     const fetchDashboardData = async () => {
       try {
-        // Fetch predictions for multiple items
-        const predictionPromises = sampleItemIds.map(itemId =>
-          fetch(`${FLASK_BASE_URL}/predict/${itemId}`)
-            .then(res => res.ok ? res.json() : null)
-            .catch(() => null)
-        );
-        const predictions = await Promise.all(predictionPromises);
-        
-        // Merge predictions into stock data
-        if (predictions.some(p => p !== null)) {
-          const days = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
-          const mergedData = days.map((day, idx) => ({
-            name: day,
-            stock: predictions.reduce((sum, pred) => {
-              if (pred?.prediction?.[idx]) return sum + pred.prediction[idx];
-              return sum + fallbackStockData[idx]?.stock || 0;
-            }, 0) / predictions.length
-          }));
-          setStockData(mergedData);
-        }
-
-        // Fetch categories
-        const categoriesRes = await fetch(`${FLASK_BASE_URL}/categories`);
-        if (categoriesRes.ok) {
-          const categoriesData = await categoriesRes.json();
-          setCategoryData(categoriesData.categories || fallbackCategoryData);
-          setTotalCategories(categoriesData.total || 12);
-        }
-
-        // Fetch alerts
-        const alertsRes = await fetch(`${FLASK_BASE_URL}/alerts`);
-        if (alertsRes.ok) {
-          const alertsData = await alertsRes.json();
-          setAlerts(alertsData.alerts || fallbackAlerts);
-          setLowStockAlerts(alertsData.alerts?.filter((a: any) => a.severity === "warning").length || 8);
-        }
-
-        // Fetch hardware status for monitored items
-        const hardwareRes = await fetch(`${FLASK_BASE_URL}/hardware-status/smartwatch-001`);
-        if (hardwareRes.ok) {
-          const hardwareData = await hardwareRes.json();
-          if (hardwareData.weight_drop_detected) {
-            setAlerts(prev => [{
-              id: Date.now(),
-              message: `Weight drop detected: ${hardwareData.item_name || 'Unknown Item'}`,
-              time: "Just now",
-              severity: "error"
-            }, ...prev]);
-            
-            toast({
-              title: "Hardware Alert",
-              description: `Weight sensor triggered for ${hardwareData.item_name}`,
-              variant: "destructive",
-            });
-          }
-        }
-
+        // TODO: Fetch real data from backend
         setIsLoading(false);
       } catch (error) {
         console.error("Failed to fetch dashboard data:", error);
-        // Use fallback data
-        setStockData(fallbackStockData);
-        setCategoryData(fallbackCategoryData);
-        setAlerts(fallbackAlerts);
         setIsLoading(false);
       }
     };
 
     fetchDashboardData();
-    const interval = setInterval(fetchDashboardData, 5000);
+    const interval = setInterval(fetchDashboardData, 30000);
     return () => clearInterval(interval);
   }, [toast]);
 
