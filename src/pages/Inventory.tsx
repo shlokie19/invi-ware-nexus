@@ -32,7 +32,7 @@ const RETRAIN_ENDPOINT = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/trig
 
 const triggerModelRetrain = async (itemId: string, action: 'add' | 'update' | 'delete') => {
   try {
-    // Call edge function
+    // Call edge function (handles cloud-based Flask communication)
     const edgeFunctionResponse = await fetch(RETRAIN_ENDPOINT, {
       method: 'POST',
       headers: {
@@ -41,28 +41,35 @@ const triggerModelRetrain = async (itemId: string, action: 'add' | 'update' | 'd
       body: JSON.stringify({ itemId, action }),
     });
     
-    if (!edgeFunctionResponse.ok) {
-      console.error('Failed to trigger model retrain via edge function');
+    const edgeResult = await edgeFunctionResponse.json();
+    if (edgeResult.warning) {
+      console.warn('ML retraining:', edgeResult.warning);
     }
 
-    // Also call Flask backend directly to retrain ML model
-    const flaskResponse = await fetch(`${FLASK_BASE_URL}/train-ml`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({ 
-        item_id: itemId, 
-        action,
-        timestamp: new Date().toISOString()
-      }),
-    });
-    
-    if (!flaskResponse.ok) {
-      console.error('Failed to trigger ML retraining on Flask backend');
+    // Try to call Flask backend directly (only works if running locally)
+    try {
+      const flaskResponse = await fetch(`${FLASK_BASE_URL}/train-ml`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ 
+          item_id: itemId, 
+          action,
+          timestamp: new Date().toISOString()
+        }),
+      });
+      
+      if (flaskResponse.ok) {
+        console.log('Successfully triggered local Flask ML retraining');
+      }
+    } catch (flaskError) {
+      // Flask not available locally - this is okay, the edge function may handle it
+      console.log('Local Flask backend not available (expected in production)');
     }
   } catch (error) {
     console.error('Error triggering model retrain:', error);
+    // Don't throw - we don't want to block inventory operations if ML is unavailable
   }
 };
 
