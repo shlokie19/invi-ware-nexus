@@ -1,8 +1,10 @@
 import { useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { ChevronDown, ChevronRight, Plus, Edit, Trash2, TrendingUp, TrendingDown, Minus, History, AlertTriangle } from "lucide-react";
+import { ChevronDown, ChevronRight, Plus, Edit, Trash2, TrendingUp, TrendingDown, Minus, History, AlertTriangle, Bell, X } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
+import { Textarea } from "@/components/ui/textarea";
 import {
   Dialog,
   DialogContent,
@@ -94,8 +96,13 @@ interface StockHistoryEntry {
 interface Item {
   id: string;
   name: string;
+  sku?: string;
+  unit: string;
   quantity: number;
   reorderLevel: number;
+  supplierId?: string;
+  costPrice?: number;
+  sellingPrice?: number;
   status: "normal" | "low";
   lastUpdated: string;
   batches: Batch[];
@@ -103,6 +110,7 @@ interface Item {
   predictionTrend: "increasing" | "decreasing" | "stable";
   predictionConfidence: number;
   predictedStatus: "normal" | "low";
+  hasExpiringBatches?: boolean;
 }
 
 interface Subcategory {
@@ -117,11 +125,12 @@ interface Category {
   subcategories: Subcategory[];
 }
 
-const isExpiringSoon = (expiryDate: string) => {
+const isExpiringSoon = (expiryDate: string, threshold: number = 7) => {
+  if (!expiryDate) return false;
   const today = new Date();
   const expiry = new Date(expiryDate);
   const daysUntilExpiry = Math.ceil((expiry.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
-  return daysUntilExpiry <= 7 && daysUntilExpiry >= 0;
+  return daysUntilExpiry <= threshold && daysUntilExpiry >= 0;
 };
 
 export default function Inventory() {
@@ -139,14 +148,29 @@ export default function Inventory() {
   const [batchDialog, setBatchDialog] = useState<{ open: boolean; categoryId?: string; subcategoryId?: string; itemId?: string }>({ open: false });
   const [deleteDialog, setDeleteDialog] = useState<{ open: boolean; type?: "category" | "subcategory" | "item"; id?: string; parentId?: string; subParentId?: string }>({ open: false });
   const [historyDialog, setHistoryDialog] = useState<{ open: boolean; itemId?: string; itemName?: string }>({ open: false });
+  const [removeStockDialog, setRemoveStockDialog] = useState<{ open: boolean; item?: Item }>({ open: false });
+  const [expiryAlertsDialog, setExpiryAlertsDialog] = useState(false);
   const [stockHistory, setStockHistory] = useState<StockHistoryEntry[]>([]);
   const [loadingHistory, setLoadingHistory] = useState(false);
+  const [expiryThreshold, setExpiryThreshold] = useState(7);
 
   // Form states
   const [categoryForm, setCategoryForm] = useState({ name: "" });
   const [subcategoryForm, setSubcategoryForm] = useState({ name: "" });
-  const [itemForm, setItemForm] = useState({ name: "", quantity: 0, reorderLevel: 15 });
+  const [itemForm, setItemForm] = useState({ 
+    name: "", 
+    sku: "", 
+    unit: "pcs", 
+    quantity: 0, 
+    reorderLevel: 15,
+    supplierId: "",
+    costPrice: 0,
+    sellingPrice: 0,
+    batches: [{ batchNumber: "", quantity: 0, expiryDate: "" }]
+  });
   const [batchForm, setBatchForm] = useState({ batchNumber: "", quantity: 0, expiryDate: "" });
+  const [removeStockForm, setRemoveStockForm] = useState({ mode: "sale", quantity: 0, note: "" });
+  const [skuError, setSkuError] = useState("");
 
   // Load data from database
   useEffect(() => {
@@ -208,17 +232,23 @@ export default function Inventory() {
                     batchNumber: batch.batch_number,
                     quantity: batch.quantity,
                     expiryDate: batch.expiry_date || '',
-                    isExpiringSoon: batch.expiry_date ? isExpiringSoon(batch.expiry_date) : false,
+                    isExpiringSoon: batch.expiry_date ? isExpiringSoon(batch.expiry_date, expiryThreshold) : false,
                   }));
 
                 const status = item.quantity <= item.reorder_level ? "low" : "normal";
                 const predictedStatus = (item.predicted_stock || item.quantity) <= item.reorder_level ? "low" : "normal";
+                const hasExpiringBatches = itemBatches.some(b => b.isExpiringSoon);
 
                 return {
                   id: item.id,
                   name: item.name,
+                  sku: item.sku || undefined,
+                  unit: item.unit || 'pcs',
                   quantity: item.quantity,
                   reorderLevel: item.reorder_level,
+                  supplierId: item.supplier_id || undefined,
+                  costPrice: item.cost_price || undefined,
+                  sellingPrice: item.selling_price || undefined,
                   status,
                   lastUpdated: new Date(item.updated_at).toLocaleString(),
                   batches: itemBatches,
@@ -226,6 +256,7 @@ export default function Inventory() {
                   predictionTrend: (item.prediction_trend as "increasing" | "decreasing" | "stable") || "stable",
                   predictionConfidence: item.prediction_confidence || 0,
                   predictedStatus,
+                  hasExpiringBatches,
                 };
               }),
           })),
@@ -395,15 +426,59 @@ export default function Inventory() {
     }
   };
 
+  const validateSku = async (sku: string, currentItemId?: string) => {
+    if (!sku.trim()) {
+      setSkuError("SKU is required");
+      return false;
+    }
+    
+    const { data } = await supabase
+      .from('items')
+      .select('id')
+      .eq('sku', sku);
+    
+    if (data && data.length > 0) {
+      if (!currentItemId || data[0].id !== currentItemId) {
+        setSkuError("SKU already exists");
+        return false;
+      }
+    }
+    
+    setSkuError("");
+    return true;
+  };
+
   const handleAddItem = async () => {
-    if (!itemForm.name.trim() || !itemDialog.categoryId || !itemDialog.subcategoryId) return;
+    if (!itemForm.name.trim() || !itemDialog.categoryId || !itemDialog.subcategoryId) {
+      toast({ title: "Please fill all required fields", variant: "destructive" });
+      return;
+    }
+    
+    const isSkuValid = await validateSku(itemForm.sku);
+    if (!isSkuValid) return;
+
+    // Validate batches
+    const validBatches = itemForm.batches.filter(b => b.batchNumber.trim() && b.quantity > 0);
+    if (validBatches.length === 0) {
+      toast({ title: "At least one valid batch is required", variant: "destructive" });
+      return;
+    }
+
     try {
+      // Calculate total quantity from batches
+      const totalQuantity = validBatches.reduce((sum, b) => sum + b.quantity, 0);
+
       const { data, error } = await supabase
         .from('items')
         .insert([{
           name: itemForm.name,
-          quantity: itemForm.quantity,
+          sku: itemForm.sku,
+          unit: itemForm.unit,
+          quantity: totalQuantity,
           reorder_level: itemForm.reorderLevel,
+          supplier_id: itemForm.supplierId || null,
+          cost_price: itemForm.costPrice || null,
+          selling_price: itemForm.sellingPrice || null,
           subcategory_id: itemDialog.subcategoryId,
         }])
         .select()
@@ -411,8 +486,33 @@ export default function Inventory() {
 
       if (error) throw error;
 
+      // Add batches
+      const batchInserts = validBatches.map(batch => ({
+        batch_number: batch.batchNumber,
+        quantity: batch.quantity,
+        expiry_date: batch.expiryDate || null,
+        item_id: data.id,
+      }));
+
+      const { error: batchError } = await supabase
+        .from('batches')
+        .insert(batchInserts);
+
+      if (batchError) throw batchError;
+
       setItemDialog({ open: false, mode: "add" });
-      setItemForm({ name: "", quantity: 0, reorderLevel: 15 });
+      setItemForm({ 
+        name: "", 
+        sku: "", 
+        unit: "pcs", 
+        quantity: 0, 
+        reorderLevel: 15,
+        supplierId: "",
+        costPrice: 0,
+        sellingPrice: 0,
+        batches: [{ batchNumber: "", quantity: 0, expiryDate: "" }]
+      });
+      setSkuError("");
       toast({ title: "Item added successfully" });
       loadData();
 
@@ -420,9 +520,9 @@ export default function Inventory() {
       if (data) {
         triggerModelRetrain(data.id, 'add');
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error adding item:', error);
-      toast({ title: "Error adding item", variant: "destructive" });
+      toast({ title: error.message || "Error adding item", variant: "destructive" });
     }
   };
 
@@ -430,28 +530,46 @@ export default function Inventory() {
     if (!itemForm.name.trim() || !itemDialog.data) return;
     const itemId = itemDialog.data.id;
     
+    const isSkuValid = await validateSku(itemForm.sku, itemId);
+    if (!isSkuValid) return;
+    
     try {
       const { error } = await supabase
         .from('items')
         .update({
           name: itemForm.name,
-          quantity: itemForm.quantity,
+          sku: itemForm.sku,
+          unit: itemForm.unit,
           reorder_level: itemForm.reorderLevel,
+          supplier_id: itemForm.supplierId || null,
+          cost_price: itemForm.costPrice || null,
+          selling_price: itemForm.sellingPrice || null,
         })
         .eq('id', itemId);
 
       if (error) throw error;
 
       setItemDialog({ open: false, mode: "add" });
-      setItemForm({ name: "", quantity: 0, reorderLevel: 15 });
+      setItemForm({ 
+        name: "", 
+        sku: "", 
+        unit: "pcs", 
+        quantity: 0, 
+        reorderLevel: 15,
+        supplierId: "",
+        costPrice: 0,
+        sellingPrice: 0,
+        batches: [{ batchNumber: "", quantity: 0, expiryDate: "" }]
+      });
+      setSkuError("");
       toast({ title: "Item updated successfully" });
       loadData();
 
       // Trigger ML model retraining
       triggerModelRetrain(itemId, 'update');
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error updating item:', error);
-      toast({ title: "Error updating item", variant: "destructive" });
+      toast({ title: error.message || "Error updating item", variant: "destructive" });
     }
   };
 
@@ -479,6 +597,49 @@ export default function Inventory() {
     }
   };
 
+  const handleRemoveStock = async () => {
+    if (!removeStockDialog.item || removeStockForm.quantity <= 0) {
+      toast({ title: "Invalid quantity", variant: "destructive" });
+      return;
+    }
+
+    if (removeStockForm.mode === "damaged" && !removeStockForm.note.trim()) {
+      toast({ title: "Note is required for damaged items", variant: "destructive" });
+      return;
+    }
+
+    if (removeStockForm.quantity > removeStockDialog.item.quantity) {
+      toast({ title: "Quantity exceeds available stock", variant: "destructive" });
+      return;
+    }
+
+    try {
+      const { data, error } = await supabase.rpc('transactional_adjust_stock', {
+        p_item_id: removeStockDialog.item.id,
+        p_change_type: removeStockForm.mode,
+        p_quantity_changed: -removeStockForm.quantity,
+        p_note: removeStockForm.note || null,
+      });
+
+      if (error) throw error;
+
+      const result = data as { success: boolean; error?: string };
+      if (!result.success) {
+        throw new Error(result.error || 'Unknown error');
+      }
+
+      setRemoveStockDialog({ open: false });
+      setRemoveStockForm({ mode: "sale", quantity: 0, note: "" });
+      toast({ 
+        title: `Stock ${removeStockForm.mode === 'sale' ? 'sold' : 'removed'} successfully` 
+      });
+      loadData();
+    } catch (error: any) {
+      console.error('Error removing stock:', error);
+      toast({ title: error.message || "Error removing stock", variant: "destructive" });
+    }
+  };
+
   const handleAddBatch = async () => {
     if (!batchForm.batchNumber.trim() || !batchDialog.itemId) return;
     try {
@@ -503,6 +664,40 @@ export default function Inventory() {
     }
   };
 
+  const getExpiringBatches = () => {
+    const expiringBatches: Array<{ 
+      itemName: string; 
+      batchNumber: string; 
+      quantity: number; 
+      expiryDate: string;
+      daysRemaining: number;
+    }> = [];
+
+    categories.forEach(cat => {
+      cat.subcategories.forEach(sub => {
+        sub.items.forEach(item => {
+          item.batches.forEach(batch => {
+            if (batch.expiryDate && isExpiringSoon(batch.expiryDate, expiryThreshold)) {
+              const today = new Date();
+              const expiry = new Date(batch.expiryDate);
+              const daysRemaining = Math.ceil((expiry.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+              
+              expiringBatches.push({
+                itemName: item.name,
+                batchNumber: batch.batchNumber,
+                quantity: batch.quantity,
+                expiryDate: batch.expiryDate,
+                daysRemaining,
+              });
+            }
+          });
+        });
+      });
+    });
+
+    return expiringBatches.sort((a, b) => a.daysRemaining - b.daysRemaining);
+  };
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -510,16 +705,31 @@ export default function Inventory() {
           <h1 className="text-3xl font-bold">Inventory Management</h1>
           <p className="text-muted-foreground">Hierarchical view of all inventory items</p>
         </div>
-        <Button 
-          className="bg-primary hover:bg-primary/90"
-          onClick={() => {
-            setCategoryForm({ name: "" });
-            setCategoryDialog({ open: true, mode: "add" });
-          }}
-        >
-          <Plus className="mr-2 h-4 w-4" />
-          Add Category
-        </Button>
+        <div className="flex gap-2">
+          <Button 
+            variant="outline"
+            onClick={() => setExpiryAlertsDialog(true)}
+            className="relative"
+          >
+            <Bell className="mr-2 h-4 w-4" />
+            Expiry Alerts
+            {getExpiringBatches().length > 0 && (
+              <Badge variant="destructive" className="ml-2 h-5 w-5 rounded-full p-0 flex items-center justify-center">
+                {getExpiringBatches().length}
+              </Badge>
+            )}
+          </Button>
+          <Button 
+            className="bg-primary hover:bg-primary/90"
+            onClick={() => {
+              setCategoryForm({ name: "" });
+              setCategoryDialog({ open: true, mode: "add" });
+            }}
+          >
+            <Plus className="mr-2 h-4 w-4" />
+            Add Category
+          </Button>
+        </div>
       </div>
 
       {loading ? (
@@ -602,12 +812,22 @@ export default function Inventory() {
                           <Badge variant="secondary">{subcategory.items.length} items</Badge>
                         </div>
                         <div className="flex gap-2">
-                          <Button
+                           <Button
                             size="sm"
                             variant="ghost"
                             onClick={(e) => {
                               e.stopPropagation();
-                              setItemForm({ name: "", quantity: 0, reorderLevel: 15 });
+                              setItemForm({ 
+                                name: "", 
+                                sku: "", 
+                                unit: "pcs", 
+                                quantity: 0, 
+                                reorderLevel: 15,
+                                supplierId: "",
+                                costPrice: 0,
+                                sellingPrice: 0,
+                                batches: [{ batchNumber: "", quantity: 0, expiryDate: "" }]
+                              });
                               setItemDialog({ open: true, mode: "add", categoryId: category.id, subcategoryId: subcategory.id });
                             }}
                           >
@@ -653,42 +873,53 @@ export default function Inventory() {
                                 ) : (
                                   <ChevronRight className="h-4 w-4" />
                                 )}
-                                <div className="flex-1">
-                                  <div className="flex items-center gap-2 flex-wrap">
-                                    <span className="font-medium">{item.name}</span>
-                                    <Badge
-                                      variant={item.status === "low" ? "destructive" : "secondary"}
-                                      className="text-xs"
-                                    >
-                                      {item.status === "low" ? "Low Stock" : "Normal"}
-                                    </Badge>
-                                    {item.predictedStatus === "low" && (
-                                      <Badge variant="outline" className="text-xs border-warning text-warning">
-                                        Predicted Low Stock
-                                      </Badge>
-                                    )}
-                                  </div>
-                                  <div className="text-sm text-muted-foreground space-y-1">
-                                    <div>Quantity: {item.quantity} • Updated {item.lastUpdated}</div>
-                                    <div className="flex items-center gap-2">
-                                      <span className="font-medium text-primary">
-                                        ML Prediction: {item.predictedStock} units (7d)
-                                      </span>
-                                      {item.predictionTrend === "increasing" && (
-                                        <TrendingUp className="h-3 w-3 text-success" />
-                                      )}
-                                      {item.predictionTrend === "decreasing" && (
-                                        <TrendingDown className="h-3 w-3 text-warning" />
-                                      )}
-                                      {item.predictionTrend === "stable" && (
-                                        <Minus className="h-3 w-3 text-muted-foreground" />
-                                      )}
-                                      <Badge variant="secondary" className="text-xs">
-                                        {item.predictionConfidence}% confidence
-                                      </Badge>
-                                    </div>
-                                  </div>
-                                </div>
+                                 <div className="flex-1">
+                                   <div className="flex items-center gap-2 flex-wrap">
+                                     <span className="font-medium">{item.name}</span>
+                                     {item.sku && (
+                                       <Badge variant="outline" className="text-xs">
+                                         SKU: {item.sku}
+                                       </Badge>
+                                     )}
+                                     <Badge
+                                       variant={item.status === "low" ? "destructive" : "secondary"}
+                                       className="text-xs"
+                                     >
+                                       {item.status === "low" ? "Low Stock" : "Normal"}
+                                     </Badge>
+                                     {item.predictedStatus === "low" && (
+                                       <Badge variant="outline" className="text-xs border-warning text-warning">
+                                         Predicted Low Stock
+                                       </Badge>
+                                     )}
+                                     {item.hasExpiringBatches && (
+                                       <Badge variant="destructive" className="text-xs">
+                                         <AlertTriangle className="h-3 w-3 mr-1" />
+                                         Expiring Soon
+                                       </Badge>
+                                     )}
+                                   </div>
+                                   <div className="text-sm text-muted-foreground space-y-1">
+                                     <div>Quantity: {item.quantity} {item.unit} • Updated {item.lastUpdated}</div>
+                                     <div className="flex items-center gap-2">
+                                       <span className="font-medium text-primary">
+                                         ML Prediction: {item.predictedStock} units (7d)
+                                       </span>
+                                       {item.predictionTrend === "increasing" && (
+                                         <TrendingUp className="h-3 w-3 text-success" />
+                                       )}
+                                       {item.predictionTrend === "decreasing" && (
+                                         <TrendingDown className="h-3 w-3 text-warning" />
+                                       )}
+                                       {item.predictionTrend === "stable" && (
+                                         <Minus className="h-3 w-3 text-muted-foreground" />
+                                       )}
+                                       <Badge variant="secondary" className="text-xs">
+                                         {item.predictionConfidence}% confidence
+                                       </Badge>
+                                     </div>
+                                   </div>
+                                 </div>
                               </div>
                               <div className="flex gap-2">
                                 <Button
@@ -696,7 +927,17 @@ export default function Inventory() {
                                   variant="ghost"
                                   onClick={(e) => {
                                     e.stopPropagation();
-                                    setItemForm({ name: item.name, quantity: item.quantity, reorderLevel: item.reorderLevel });
+                                    setItemForm({ 
+                                      name: item.name, 
+                                      sku: item.sku || "", 
+                                      unit: item.unit || "pcs", 
+                                      quantity: item.quantity, 
+                                      reorderLevel: item.reorderLevel,
+                                      supplierId: item.supplierId || "",
+                                      costPrice: item.costPrice || 0,
+                                      sellingPrice: item.sellingPrice || 0,
+                                      batches: [{ batchNumber: "", quantity: 0, expiryDate: "" }]
+                                    });
                                     setItemDialog({ open: true, mode: "edit", data: item });
                                   }}
                                 >
@@ -707,10 +948,22 @@ export default function Inventory() {
                                   variant="ghost"
                                   onClick={(e) => {
                                     e.stopPropagation();
-                                    setDeleteDialog({ open: true, type: "item", id: item.id });
+                                    setRemoveStockForm({ mode: "sale", quantity: 0, note: "" });
+                                    setRemoveStockDialog({ open: true, item });
                                   }}
                                 >
-                                  <Trash2 className="h-3 w-3" />
+                                  <Minus className="h-3 w-3" />
+                                </Button>
+                                <Button
+                                  size="sm"
+                                  variant="ghost"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    loadStockHistory(item.id);
+                                    setHistoryDialog({ open: true, itemId: item.id, itemName: item.name });
+                                  }}
+                                >
+                                  <History className="h-3 w-3" />
                                 </Button>
                               </div>
                             </div>
@@ -835,46 +1088,186 @@ export default function Inventory() {
 
       {/* Item Dialog */}
       <Dialog open={itemDialog.open} onOpenChange={(open) => setItemDialog({ ...itemDialog, open })}>
-        <DialogContent>
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>{itemDialog.mode === "add" ? "Add Item" : "Edit Item"}</DialogTitle>
             <DialogDescription>
-              {itemDialog.mode === "add" ? "Add a new item to the inventory." : "Update item details."}
+              {itemDialog.mode === "add" ? "Add a new item with batches to the inventory." : "Update item details."}
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-4">
-            <div className="space-y-2">
-              <Label htmlFor="item-name">Item Name</Label>
-              <Input
-                id="item-name"
-                value={itemForm.name}
-                onChange={(e) => setItemForm({ ...itemForm, name: e.target.value })}
-                placeholder="Enter item name"
-              />
+            {/* Core Fields Section */}
+            <div className="space-y-4">
+              <h3 className="font-medium text-sm">Core Information</h3>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="item-name">Item Name *</Label>
+                  <Input
+                    id="item-name"
+                    value={itemForm.name}
+                    onChange={(e) => setItemForm({ ...itemForm, name: e.target.value })}
+                    placeholder="Enter item name"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="item-sku">SKU *</Label>
+                  <Input
+                    id="item-sku"
+                    value={itemForm.sku}
+                    onChange={(e) => {
+                      setItemForm({ ...itemForm, sku: e.target.value });
+                      setSkuError("");
+                    }}
+                    placeholder="Enter SKU"
+                  />
+                  {skuError && <p className="text-xs text-destructive">{skuError}</p>}
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="item-unit">Unit</Label>
+                  <Input
+                    id="item-unit"
+                    value={itemForm.unit}
+                    onChange={(e) => setItemForm({ ...itemForm, unit: e.target.value })}
+                    placeholder="e.g., pcs, kg, liter"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="item-reorder-level">Reorder Level</Label>
+                  <Input
+                    id="item-reorder-level"
+                    type="number"
+                    value={itemForm.reorderLevel}
+                    onChange={(e) => setItemForm({ ...itemForm, reorderLevel: parseInt(e.target.value) || 15 })}
+                    placeholder="Low stock threshold"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-3 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="item-supplier">Supplier ID</Label>
+                  <Input
+                    id="item-supplier"
+                    value={itemForm.supplierId}
+                    onChange={(e) => setItemForm({ ...itemForm, supplierId: e.target.value })}
+                    placeholder="Optional"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="item-cost">Cost Price</Label>
+                  <Input
+                    id="item-cost"
+                    type="number"
+                    step="0.01"
+                    value={itemForm.costPrice}
+                    onChange={(e) => setItemForm({ ...itemForm, costPrice: parseFloat(e.target.value) || 0 })}
+                    placeholder="0.00"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="item-selling">Selling Price</Label>
+                  <Input
+                    id="item-selling"
+                    type="number"
+                    step="0.01"
+                    value={itemForm.sellingPrice}
+                    onChange={(e) => setItemForm({ ...itemForm, sellingPrice: parseFloat(e.target.value) || 0 })}
+                    placeholder="0.00"
+                  />
+                </div>
+              </div>
             </div>
-            <div className="space-y-2">
-              <Label htmlFor="item-quantity">Quantity</Label>
-              <Input
-                id="item-quantity"
-                type="number"
-                value={itemForm.quantity}
-                onChange={(e) => setItemForm({ ...itemForm, quantity: parseInt(e.target.value) || 0 })}
-                placeholder="Enter quantity"
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="item-reorder-level">Reorder Level (Low Stock Threshold)</Label>
-              <Input
-                id="item-reorder-level"
-                type="number"
-                value={itemForm.reorderLevel}
-                onChange={(e) => setItemForm({ ...itemForm, reorderLevel: parseInt(e.target.value) || 15 })}
-                placeholder="Enter reorder level"
-              />
-            </div>
+
+            {/* Batches Section - Only for Add Mode */}
+            {itemDialog.mode === "add" && (
+              <div className="space-y-4 border-t pt-4">
+                <div className="flex items-center justify-between">
+                  <h3 className="font-medium text-sm">Batches *</h3>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    onClick={() => {
+                      setItemForm({
+                        ...itemForm,
+                        batches: [...itemForm.batches, { batchNumber: "", quantity: 0, expiryDate: "" }]
+                      });
+                    }}
+                  >
+                    <Plus className="h-3 w-3 mr-1" />
+                    Add Batch
+                  </Button>
+                </div>
+                {itemForm.batches.map((batch, index) => (
+                  <div key={index} className="grid grid-cols-12 gap-2 items-end">
+                    <div className="col-span-4 space-y-2">
+                      <Label htmlFor={`batch-number-${index}`}>Batch Number</Label>
+                      <Input
+                        id={`batch-number-${index}`}
+                        value={batch.batchNumber}
+                        onChange={(e) => {
+                          const newBatches = [...itemForm.batches];
+                          newBatches[index].batchNumber = e.target.value;
+                          setItemForm({ ...itemForm, batches: newBatches });
+                        }}
+                        placeholder="Batch #"
+                      />
+                    </div>
+                    <div className="col-span-3 space-y-2">
+                      <Label htmlFor={`batch-qty-${index}`}>Quantity</Label>
+                      <Input
+                        id={`batch-qty-${index}`}
+                        type="number"
+                        value={batch.quantity}
+                        onChange={(e) => {
+                          const newBatches = [...itemForm.batches];
+                          newBatches[index].quantity = parseInt(e.target.value) || 0;
+                          setItemForm({ ...itemForm, batches: newBatches });
+                        }}
+                        placeholder="0"
+                      />
+                    </div>
+                    <div className="col-span-4 space-y-2">
+                      <Label htmlFor={`batch-expiry-${index}`}>Expiry Date (Optional)</Label>
+                      <Input
+                        id={`batch-expiry-${index}`}
+                        type="date"
+                        value={batch.expiryDate}
+                        onChange={(e) => {
+                          const newBatches = [...itemForm.batches];
+                          newBatches[index].expiryDate = e.target.value;
+                          setItemForm({ ...itemForm, batches: newBatches });
+                        }}
+                      />
+                    </div>
+                    {itemForm.batches.length > 1 && (
+                      <div className="col-span-1">
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="ghost"
+                          onClick={() => {
+                            const newBatches = itemForm.batches.filter((_, i) => i !== index);
+                            setItemForm({ ...itemForm, batches: newBatches });
+                          }}
+                        >
+                          <X className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setItemDialog({ open: false, mode: "add" })}>
+            <Button variant="outline" onClick={() => {
+              setItemDialog({ open: false, mode: "add" });
+              setSkuError("");
+            }}>
               Cancel
             </Button>
             <Button onClick={itemDialog.mode === "add" ? handleAddItem : handleEditItem}>
@@ -1007,6 +1400,144 @@ export default function Inventory() {
           <DialogFooter>
             <Button variant="outline" onClick={() => setHistoryDialog({ open: false })}>
               Close
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Expiry Alerts Dialog */}
+      <Dialog open={expiryAlertsDialog} onOpenChange={setExpiryAlertsDialog}>
+        <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Expiry Alerts</DialogTitle>
+            <DialogDescription>
+              Batches expiring within {expiryThreshold} days
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="flex items-center gap-2">
+              <Label htmlFor="expiry-threshold" className="whitespace-nowrap">Alert Threshold (days):</Label>
+              <Input
+                id="expiry-threshold"
+                type="number"
+                value={expiryThreshold}
+                onChange={(e) => setExpiryThreshold(parseInt(e.target.value) || 7)}
+                className="w-20"
+              />
+            </div>
+
+            {getExpiringBatches().length === 0 ? (
+              <div className="text-center text-muted-foreground py-8">
+                No batches expiring soon
+              </div>
+            ) : (
+              <div className="space-y-2">
+                {getExpiringBatches().map((batch, index) => (
+                  <Card key={index} className="p-3 border-destructive">
+                    <div className="flex items-center justify-between">
+                      <div className="space-y-1">
+                        <div className="flex items-center gap-2">
+                          <Badge variant="destructive">
+                            {batch.daysRemaining === 0 ? 'Expires Today' : `${batch.daysRemaining} days left`}
+                          </Badge>
+                          <span className="font-medium">{batch.itemName}</span>
+                        </div>
+                        <div className="text-sm text-muted-foreground">
+                          Batch: {batch.batchNumber} • Quantity: {batch.quantity}
+                        </div>
+                      </div>
+                      <div className="text-sm text-destructive font-medium">
+                        Exp: {new Date(batch.expiryDate).toLocaleDateString()}
+                      </div>
+                    </div>
+                  </Card>
+                ))}
+              </div>
+            )}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setExpiryAlertsDialog(false)}>
+              Close
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Remove/Adjust Stock Dialog */}
+      <Dialog open={removeStockDialog.open} onOpenChange={(open) => setRemoveStockDialog({ ...removeStockDialog, open })}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Remove/Adjust Stock - {removeStockDialog.item?.name}</DialogTitle>
+            <DialogDescription>
+              Record a sale or damaged/other stock removal
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label>Removal Type</Label>
+              <RadioGroup 
+                value={removeStockForm.mode}
+                onValueChange={(value) => setRemoveStockForm({ ...removeStockForm, mode: value as "sale" | "damaged" })}
+              >
+                <div className="flex items-center space-x-2">
+                  <RadioGroupItem value="sale" id="sale" />
+                  <Label htmlFor="sale" className="font-normal cursor-pointer">Sale</Label>
+                </div>
+                <div className="flex items-center space-x-2">
+                  <RadioGroupItem value="damaged" id="damaged" />
+                  <Label htmlFor="damaged" className="font-normal cursor-pointer">Damaged/Other</Label>
+                </div>
+              </RadioGroup>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="remove-quantity">Quantity to Remove *</Label>
+              <Input
+                id="remove-quantity"
+                type="number"
+                min="1"
+                max={removeStockDialog.item?.quantity || 0}
+                value={removeStockForm.quantity}
+                onChange={(e) => setRemoveStockForm({ ...removeStockForm, quantity: parseInt(e.target.value) || 0 })}
+                placeholder="Enter quantity"
+              />
+              <p className="text-xs text-muted-foreground">
+                Available: {removeStockDialog.item?.quantity || 0} {removeStockDialog.item?.unit || 'units'}
+              </p>
+            </div>
+
+            {removeStockForm.mode === "damaged" && (
+              <div className="space-y-2">
+                <Label htmlFor="remove-note">Note * (Required for damaged items)</Label>
+                <Textarea
+                  id="remove-note"
+                  value={removeStockForm.note}
+                  onChange={(e) => setRemoveStockForm({ ...removeStockForm, note: e.target.value })}
+                  placeholder="Explain reason for removal"
+                  rows={3}
+                />
+              </div>
+            )}
+
+            {removeStockForm.mode === "sale" && (
+              <div className="space-y-2">
+                <Label htmlFor="sale-note">Note (Optional)</Label>
+                <Textarea
+                  id="sale-note"
+                  value={removeStockForm.note}
+                  onChange={(e) => setRemoveStockForm({ ...removeStockForm, note: e.target.value })}
+                  placeholder="Add optional note"
+                  rows={2}
+                />
+              </div>
+            )}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setRemoveStockDialog({ open: false })}>
+              Cancel
+            </Button>
+            <Button onClick={handleRemoveStock} variant={removeStockForm.mode === "damaged" ? "destructive" : "default"}>
+              Confirm {removeStockForm.mode === "sale" ? "Sale" : "Removal"}
             </Button>
           </DialogFooter>
         </DialogContent>
