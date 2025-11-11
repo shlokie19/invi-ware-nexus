@@ -69,6 +69,7 @@ export type Database = {
       }
       items: {
         Row: {
+          cost_price: number | null
           created_at: string
           id: string
           name: string
@@ -77,10 +78,15 @@ export type Database = {
           prediction_trend: string | null
           quantity: number
           reorder_level: number
+          selling_price: number | null
+          sku: string | null
           subcategory_id: string
+          supplier_id: string | null
+          unit: string | null
           updated_at: string
         }
         Insert: {
+          cost_price?: number | null
           created_at?: string
           id?: string
           name: string
@@ -89,10 +95,15 @@ export type Database = {
           prediction_trend?: string | null
           quantity?: number
           reorder_level?: number
+          selling_price?: number | null
+          sku?: string | null
           subcategory_id: string
+          supplier_id?: string | null
+          unit?: string | null
           updated_at?: string
         }
         Update: {
+          cost_price?: number | null
           created_at?: string
           id?: string
           name?: string
@@ -101,7 +112,11 @@ export type Database = {
           prediction_trend?: string | null
           quantity?: number
           reorder_level?: number
+          selling_price?: number | null
+          sku?: string | null
           subcategory_id?: string
+          supplier_id?: string | null
+          unit?: string | null
           updated_at?: string
         }
         Relationships: [
@@ -117,30 +132,36 @@ export type Database = {
       stock_history: {
         Row: {
           action: string
+          change_type: string | null
           created_at: string
           id: string
           item_id: string
           new_quantity: number
+          note: string | null
           notes: string | null
           previous_quantity: number
           quantity_change: number
         }
         Insert: {
           action: string
+          change_type?: string | null
           created_at?: string
           id?: string
           item_id: string
           new_quantity: number
+          note?: string | null
           notes?: string | null
           previous_quantity: number
           quantity_change: number
         }
         Update: {
           action?: string
+          change_type?: string | null
           created_at?: string
           id?: string
           item_id?: string
           new_quantity?: number
+          note?: string | null
           notes?: string | null
           previous_quantity?: number
           quantity_change?: number
@@ -189,7 +210,15 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      transactional_adjust_stock: {
+        Args: {
+          p_change_type: string
+          p_item_id: string
+          p_note?: string
+          p_quantity_changed: number
+        }
+        Returns: Json
+      }
     }
     Enums: {
       [_ in never]: never
