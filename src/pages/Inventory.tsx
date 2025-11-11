@@ -1,8 +1,9 @@
 import { useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { ChevronDown, ChevronRight, Plus, Edit, Trash2, TrendingUp, TrendingDown, Minus, History, AlertTriangle, Bell, X, MapPin } from "lucide-react";
+import { ChevronDown, ChevronRight, Plus, Edit, Trash2, TrendingUp, TrendingDown, Minus, History, AlertTriangle, Bell, X, MapPin, Brain } from "lucide-react";
 import { LocationPicker } from "@/components/LocationPicker";
+import { useInventoryInsights } from "@/hooks/useInventoryInsights";
 import { Badge } from "@/components/ui/badge";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Textarea } from "@/components/ui/textarea";
@@ -156,6 +157,25 @@ export default function Inventory() {
   const [stockHistory, setStockHistory] = useState<StockHistoryEntry[]>([]);
   const [loadingHistory, setLoadingHistory] = useState(false);
   const [expiryThreshold, setExpiryThreshold] = useState(7);
+
+  // Get all items for insights
+  const allItems = categories.flatMap(cat => 
+    cat.subcategories.flatMap(sub => 
+      sub.items.map(item => ({
+        id: item.id,
+        quantity: item.quantity,
+        reorderLevel: item.reorderLevel,
+      }))
+    )
+  );
+
+  const expiringBatchesCount = categories.flatMap(cat => 
+    cat.subcategories.flatMap(sub => 
+      sub.items.flatMap(item => item.batches.filter(b => b.isExpiringSoon))
+    )
+  ).length;
+
+  const { itemInsights, healthScore, loading: insightsLoading } = useInventoryInsights(allItems, expiringBatchesCount);
 
   // Form states
   const [categoryForm, setCategoryForm] = useState({ name: "" });
@@ -752,6 +772,51 @@ export default function Inventory() {
         </div>
       </div>
 
+      {/* Inventory Health Score */}
+      {!loading && !insightsLoading && (
+        <Card className={`border-2 ${
+          healthScore.label === "Good" ? "border-success/40 bg-success/5" : 
+          healthScore.label === "Watch" ? "border-warning/40 bg-warning/5" : 
+          "border-destructive/40 bg-destructive/5"
+        }`}>
+          <CardContent className="pt-6">
+            <div className="flex items-center justify-between">
+              <div className="flex-1">
+                <div className="flex items-center gap-3 mb-2">
+                  <h3 className="text-lg font-semibold">Inventory Health Score</h3>
+                  <Badge 
+                    variant={
+                      healthScore.label === "Good" ? "default" : 
+                      healthScore.label === "Watch" ? "secondary" : 
+                      "destructive"
+                    }
+                    className={`text-2xl px-4 py-1 ${
+                      healthScore.label === "Good" ? "bg-success text-white" : 
+                      healthScore.label === "Watch" ? "bg-warning text-white" : 
+                      ""
+                    }`}
+                  >
+                    {healthScore.score}
+                  </Badge>
+                  <span className={`text-sm font-medium ${
+                    healthScore.label === "Good" ? "text-success" : 
+                    healthScore.label === "Watch" ? "text-warning" : 
+                    "text-destructive"
+                  }`}>
+                    {healthScore.label}
+                  </span>
+                </div>
+                <div className="flex gap-6 text-sm text-muted-foreground">
+                  <span>Low stock: <strong>{healthScore.lowStockCount}</strong> / {allItems.length}</span>
+                  <span>Expiring soon: <strong>{healthScore.expiringCount}</strong></span>
+                  <span>Avg days left: <strong>{healthScore.avgDaysLeft}</strong></span>
+                </div>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
       {loading ? (
         <div className="space-y-4">
           <Skeleton className="h-32 w-full" />
@@ -895,7 +960,7 @@ export default function Inventory() {
                                 ) : (
                                   <ChevronRight className="h-4 w-4" />
                                 )}
-                                 <div className="flex-1">
+                                   <div className="flex-1">
                                    <div className="flex items-center gap-2 flex-wrap">
                                      <span className="font-medium">{item.name}</span>
                                      {item.sku && (
@@ -920,9 +985,44 @@ export default function Inventory() {
                                          Expiring Soon
                                        </Badge>
                                      )}
+                                     {/* Predicted Stockout Badge */}
+                                     {itemInsights.has(item.id) && (() => {
+                                       const insight = itemInsights.get(item.id)!;
+                                       const daysLeft = insight.predictedDaysLeft;
+                                       const badgeVariant = daysLeft <= 3 ? "destructive" : daysLeft <= 10 ? "secondary" : "default";
+                                       const badgeColor = daysLeft <= 3 ? "bg-destructive text-white" : daysLeft <= 10 ? "bg-warning text-white" : "bg-success text-white";
+                                       return (
+                                         <Badge 
+                                           variant={badgeVariant}
+                                           className={`text-xs ${badgeColor}`}
+                                           title="Based on average daily usage from recent sales"
+                                         >
+                                           <Brain className="h-3 w-3 mr-1" />
+                                           {daysLeft === 0 ? "Out of stock" : daysLeft >= 30 ? "30+ days" : `${daysLeft} days left`}
+                                         </Badge>
+                                       );
+                                     })()}
                                    </div>
                                    <div className="text-sm text-muted-foreground space-y-1">
-                                     <div>Quantity: {item.quantity} {item.unit} • Updated {item.lastUpdated}</div>
+                                     <div className="flex items-center gap-2 flex-wrap">
+                                       <span>Quantity: {item.quantity} {item.unit}</span>
+                                       {itemInsights.has(item.id) && (() => {
+                                         const insight = itemInsights.get(item.id)!;
+                                         if (insight.predictedDaysLeft <= 7 && item.quantity > 0) {
+                                           return (
+                                             <span className="text-xs text-warning">
+                                               • Suggested reorder: {insight.suggestedReorderQty} {item.unit}
+                                             </span>
+                                           );
+                                         }
+                                         return null;
+                                       })()}
+                                       {item.quantity <= item.reorderLevel && (
+                                         <span className="text-xs text-destructive font-medium">
+                                           (below threshold)
+                                         </span>
+                                       )}
+                                     </div>
                                      <div className="flex items-center gap-2">
                                        <span className="font-medium text-primary">
                                          ML Prediction: {item.predictedStock} units (7d)
