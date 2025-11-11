@@ -63,10 +63,10 @@ export default function History() {
     dateFrom: format(subDays(new Date(), 30), "yyyy-MM-dd"),
     dateTo: format(new Date(), "yyyy-MM-dd"),
     changeTypes: [],
-    category: "",
-    subcategory: "",
-    item: "",
-    supplier: "",
+    category: "all",
+    subcategory: "all",
+    item: "all",
+    supplier: "all",
     search: "",
   });
 
@@ -143,22 +143,22 @@ export default function History() {
     }
 
     // Category
-    if (filters.category) {
+    if (filters.category && filters.category !== "all") {
       filtered = filtered.filter((r) => r.category_name === filters.category);
     }
 
     // Subcategory
-    if (filters.subcategory) {
+    if (filters.subcategory && filters.subcategory !== "all") {
       filtered = filtered.filter((r) => r.subcategory_name === filters.subcategory);
     }
 
     // Item
-    if (filters.item) {
+    if (filters.item && filters.item !== "all") {
       filtered = filtered.filter((r) => r.item_id === filters.item);
     }
 
     // Supplier
-    if (filters.supplier) {
+    if (filters.supplier && filters.supplier !== "all") {
       filtered = filtered.filter((r) => r.supplier_name === filters.supplier);
     }
 
@@ -346,7 +346,7 @@ export default function History() {
                   <SelectValue placeholder="All categories" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="">All categories</SelectItem>
+                  <SelectItem value="all">All categories</SelectItem>
                   {categories.map((cat) => (
                     <SelectItem key={cat.id} value={cat.name}>
                       {cat.name}
@@ -366,7 +366,7 @@ export default function History() {
                   <SelectValue placeholder="All subcategories" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="">All subcategories</SelectItem>
+                  <SelectItem value="all">All subcategories</SelectItem>
                   {subcategories.map((sub) => (
                     <SelectItem key={sub.id} value={sub.name}>
                       {sub.name}
@@ -383,7 +383,7 @@ export default function History() {
                   <SelectValue placeholder="All items" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="">All items</SelectItem>
+                  <SelectItem value="all">All items</SelectItem>
                   {items.map((item) => (
                     <SelectItem key={item.id} value={item.id}>
                       {item.name} ({item.sku})
@@ -400,7 +400,7 @@ export default function History() {
                   <SelectValue placeholder="All suppliers" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="">All suppliers</SelectItem>
+                  <SelectItem value="all">All suppliers</SelectItem>
                   {suppliers.map((supplier) => (
                     <SelectItem key={supplier} value={supplier}>
                       {supplier}
@@ -447,10 +447,10 @@ export default function History() {
                 dateFrom: format(subDays(new Date(), 30), "yyyy-MM-dd"),
                 dateTo: format(new Date(), "yyyy-MM-dd"),
                 changeTypes: [],
-                category: "",
-                subcategory: "",
-                item: "",
-                supplier: "",
+                category: "all",
+                subcategory: "all",
+                item: "all",
+                supplier: "all",
                 search: "",
               })
             }
