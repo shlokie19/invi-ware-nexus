@@ -10,6 +10,7 @@ import Verification from "./pages/Verification";
 import Alerts from "./pages/Alerts";
 import Analytics from "./pages/Analytics";
 import History from "./pages/History";
+import WarehouseMap from "./pages/WarehouseMap";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -28,6 +29,7 @@ const App = () => (
             <Route path="/alerts" element={<Alerts />} />
             <Route path="/analytics" element={<Analytics />} />
             <Route path="/history" element={<History />} />
+            <Route path="/warehouse-map" element={<WarehouseMap />} />
             <Route path="*" element={<NotFound />} />
           </Routes>
         </Layout>

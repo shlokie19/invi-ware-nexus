@@ -72,6 +72,7 @@ export type Database = {
           cost_price: number | null
           created_at: string
           id: string
+          location_id: string | null
           name: string
           predicted_stock: number | null
           prediction_confidence: number | null
@@ -89,6 +90,7 @@ export type Database = {
           cost_price?: number | null
           created_at?: string
           id?: string
+          location_id?: string | null
           name: string
           predicted_stock?: number | null
           prediction_confidence?: number | null
@@ -106,6 +108,7 @@ export type Database = {
           cost_price?: number | null
           created_at?: string
           id?: string
+          location_id?: string | null
           name?: string
           predicted_stock?: number | null
           prediction_confidence?: number | null
@@ -121,6 +124,13 @@ export type Database = {
         }
         Relationships: [
           {
+            foreignKeyName: "items_location_id_fkey"
+            columns: ["location_id"]
+            isOneToOne: false
+            referencedRelation: "locations"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "items_subcategory_id_fkey"
             columns: ["subcategory_id"]
             isOneToOne: false
@@ -128,6 +138,30 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      locations: {
+        Row: {
+          capacity: number
+          created_at: string
+          id: string
+          label: string
+          zone: string | null
+        }
+        Insert: {
+          capacity?: number
+          created_at?: string
+          id?: string
+          label: string
+          zone?: string | null
+        }
+        Update: {
+          capacity?: number
+          created_at?: string
+          id?: string
+          label?: string
+          zone?: string | null
+        }
+        Relationships: []
       }
       stock_history: {
         Row: {

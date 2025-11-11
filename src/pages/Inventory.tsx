@@ -1,7 +1,8 @@
 import { useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { ChevronDown, ChevronRight, Plus, Edit, Trash2, TrendingUp, TrendingDown, Minus, History, AlertTriangle, Bell, X } from "lucide-react";
+import { ChevronDown, ChevronRight, Plus, Edit, Trash2, TrendingUp, TrendingDown, Minus, History, AlertTriangle, Bell, X, MapPin } from "lucide-react";
+import { LocationPicker } from "@/components/LocationPicker";
 import { Badge } from "@/components/ui/badge";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Textarea } from "@/components/ui/textarea";
@@ -103,6 +104,8 @@ interface Item {
   supplierId?: string;
   costPrice?: number;
   sellingPrice?: number;
+  locationId?: string;
+  locationLabel?: string;
   status: "normal" | "low";
   lastUpdated: string;
   batches: Batch[];
@@ -166,11 +169,14 @@ export default function Inventory() {
     supplierId: "",
     costPrice: 0,
     sellingPrice: 0,
+    locationId: "",
+    locationLabel: "",
     batches: [{ batchNumber: "", quantity: 0, expiryDate: "" }]
   });
   const [batchForm, setBatchForm] = useState({ batchNumber: "", quantity: 0, expiryDate: "" });
   const [removeStockForm, setRemoveStockForm] = useState({ mode: "sale", quantity: 0, note: "" });
   const [skuError, setSkuError] = useState("");
+  const [locationPickerOpen, setLocationPickerOpen] = useState(false);
 
   // Load data from database
   useEffect(() => {
@@ -197,10 +203,16 @@ export default function Inventory() {
 
       if (subcategoriesError) throw subcategoriesError;
 
-      // Fetch items
+      // Fetch items with location info
       const { data: itemsData, error: itemsError } = await supabase
         .from('items')
-        .select('*')
+        .select(`
+          *,
+          locations (
+            id,
+            label
+          )
+        `)
         .order('name');
 
       if (itemsError) throw itemsError;
@@ -249,6 +261,8 @@ export default function Inventory() {
                   supplierId: item.supplier_id || undefined,
                   costPrice: item.cost_price || undefined,
                   sellingPrice: item.selling_price || undefined,
+                  locationId: item.location_id || undefined,
+                  locationLabel: (item.locations as any)?.label || undefined,
                   status,
                   lastUpdated: new Date(item.updated_at).toLocaleString(),
                   batches: itemBatches,
@@ -479,6 +493,7 @@ export default function Inventory() {
           supplier_id: itemForm.supplierId || null,
           cost_price: itemForm.costPrice || null,
           selling_price: itemForm.sellingPrice || null,
+          location_id: itemForm.locationId || null,
           subcategory_id: itemDialog.subcategoryId,
         }])
         .select()
@@ -510,6 +525,8 @@ export default function Inventory() {
         supplierId: "",
         costPrice: 0,
         sellingPrice: 0,
+        locationId: "",
+        locationLabel: "",
         batches: [{ batchNumber: "", quantity: 0, expiryDate: "" }]
       });
       setSkuError("");
@@ -544,6 +561,7 @@ export default function Inventory() {
           supplier_id: itemForm.supplierId || null,
           cost_price: itemForm.costPrice || null,
           selling_price: itemForm.sellingPrice || null,
+          location_id: itemForm.locationId || null,
         })
         .eq('id', itemId);
 
@@ -559,6 +577,8 @@ export default function Inventory() {
         supplierId: "",
         costPrice: 0,
         sellingPrice: 0,
+        locationId: "",
+        locationLabel: "",
         batches: [{ batchNumber: "", quantity: 0, expiryDate: "" }]
       });
       setSkuError("");
@@ -826,6 +846,8 @@ export default function Inventory() {
                                 supplierId: "",
                                 costPrice: 0,
                                 sellingPrice: 0,
+                                locationId: "",
+                                locationLabel: "",
                                 batches: [{ batchNumber: "", quantity: 0, expiryDate: "" }]
                               });
                               setItemDialog({ open: true, mode: "add", categoryId: category.id, subcategoryId: subcategory.id });
@@ -936,6 +958,8 @@ export default function Inventory() {
                                       supplierId: item.supplierId || "",
                                       costPrice: item.costPrice || 0,
                                       sellingPrice: item.sellingPrice || 0,
+                                      locationId: item.locationId || "",
+                                      locationLabel: item.locationLabel || "",
                                       batches: [{ batchNumber: "", quantity: 0, expiryDate: "" }]
                                     });
                                     setItemDialog({ open: true, mode: "edit", data: item });
@@ -1179,6 +1203,27 @@ export default function Inventory() {
                   />
                 </div>
               </div>
+
+              {/* Location Section */}
+              <div className="border-t pt-4 space-y-2">
+                <Label>Storage Location</Label>
+                <div className="flex gap-2">
+                  <Input
+                    value={itemForm.locationLabel}
+                    placeholder="No location assigned"
+                    readOnly
+                    className="flex-1"
+                  />
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => setLocationPickerOpen(true)}
+                  >
+                    <MapPin className="h-4 w-4 mr-2" />
+                    Pick on Map
+                  </Button>
+                </div>
+              </div>
             </div>
 
             {/* Batches Section - Only for Add Mode */}
@@ -1276,6 +1321,16 @@ export default function Inventory() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Location Picker Modal */}
+      <LocationPicker
+        open={locationPickerOpen}
+        onOpenChange={setLocationPickerOpen}
+        onSelect={(locationId, locationLabel) => {
+          setItemForm({ ...itemForm, locationId, locationLabel });
+        }}
+        currentLocationId={itemForm.locationId}
+      />
 
       {/* Batch Dialog */}
       <Dialog open={batchDialog.open} onOpenChange={(open) => setBatchDialog({ ...batchDialog, open })}>
