@@ -207,7 +207,32 @@ export type Database = {
       }
     }
     Views: {
-      [_ in never]: never
+      vw_stock_history_detailed: {
+        Row: {
+          category_name: string | null
+          change_type: string | null
+          created_at: string | null
+          id: string | null
+          item_id: string | null
+          item_name: string | null
+          new_quantity_after_change: number | null
+          note: string | null
+          quantity_changed: number | null
+          sku: string | null
+          subcategory_name: string | null
+          supplier_name: string | null
+          unit: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "stock_history_item_id_fkey"
+            columns: ["item_id"]
+            isOneToOne: false
+            referencedRelation: "items"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Functions: {
       transactional_adjust_stock: {
