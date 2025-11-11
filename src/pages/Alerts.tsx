@@ -1,10 +1,13 @@
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { AlertTriangle, AlertCircle, Info, CheckCircle } from "lucide-react";
+import { AlertTriangle, AlertCircle, Info, CheckCircle, Loader2 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
+import { useEffect, useState } from "react";
+import { supabase } from "@/integrations/supabase/client";
+import { useToast } from "@/hooks/use-toast";
 
 interface Alert {
-  id: number;
+  id: string;
   title: string;
   description: string;
   severity: "critical" | "warning" | "info";
@@ -14,7 +17,142 @@ interface Alert {
 }
 
 export default function Alerts() {
-  const alerts: Alert[] = [];
+  const [alerts, setAlerts] = useState<Alert[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const { toast } = useToast();
+
+  useEffect(() => {
+    const fetchAlerts = async () => {
+      try {
+        const alertsList: Alert[] = [];
+
+        // Fetch low stock items
+        const { data: items, error: itemsError } = await supabase
+          .from("items")
+          .select(`
+            id,
+            name,
+            quantity,
+            reorder_level,
+            subcategories (
+              name
+            )
+          `);
+
+        if (itemsError) throw itemsError;
+
+        if (items) {
+          items.forEach((item) => {
+            if (item.quantity <= item.reorder_level) {
+              alertsList.push({
+                id: `item-${item.id}`,
+                title: `Low Stock: ${item.name}`,
+                description: `Current stock: ${item.quantity} units (Reorder level: ${item.reorder_level})`,
+                severity: item.quantity === 0 ? "critical" : "warning",
+                timestamp: new Date().toLocaleString(),
+                category: "Inventory",
+                resolved: false,
+              });
+            }
+          });
+        }
+
+        // Fetch expiring batches (within 7 days)
+        const sevenDaysFromNow = new Date();
+        sevenDaysFromNow.setDate(sevenDaysFromNow.getDate() + 7);
+
+        const { data: batches, error: batchesError } = await supabase
+          .from("batches")
+          .select(`
+            id,
+            batch_number,
+            expiry_date,
+            quantity,
+            items (
+              name
+            )
+          `)
+          .lte("expiry_date", sevenDaysFromNow.toISOString().split("T")[0])
+          .gte("expiry_date", new Date().toISOString().split("T")[0]);
+
+        if (batchesError) throw batchesError;
+
+        if (batches) {
+          batches.forEach((batch: any) => {
+            const daysUntilExpiry = Math.ceil(
+              (new Date(batch.expiry_date).getTime() - new Date().getTime()) /
+                (1000 * 60 * 60 * 24)
+            );
+            alertsList.push({
+              id: `batch-${batch.id}`,
+              title: `Expiring Soon: ${batch.items?.name || "Unknown Item"}`,
+              description: `Batch ${batch.batch_number} expires in ${daysUntilExpiry} day(s) (${batch.quantity} units)`,
+              severity: daysUntilExpiry <= 3 ? "critical" : "warning",
+              timestamp: new Date().toLocaleString(),
+              category: "Expiry",
+              resolved: false,
+            });
+          });
+        }
+
+        // Sort by severity (critical first)
+        alertsList.sort((a, b) => {
+          if (a.severity === "critical" && b.severity !== "critical") return -1;
+          if (a.severity !== "critical" && b.severity === "critical") return 1;
+          return 0;
+        });
+
+        setAlerts(alertsList);
+        setIsLoading(false);
+      } catch (error) {
+        console.error("Failed to fetch alerts:", error);
+        toast({
+          title: "Error",
+          description: "Failed to load alerts",
+          variant: "destructive",
+        });
+        setIsLoading(false);
+      }
+    };
+
+    fetchAlerts();
+
+    // Set up real-time subscriptions
+    const itemsChannel = supabase
+      .channel("alerts-items")
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "items",
+        },
+        () => {
+          fetchAlerts();
+        }
+      )
+      .subscribe();
+
+    const batchesChannel = supabase
+      .channel("alerts-batches")
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "batches",
+        },
+        () => {
+          fetchAlerts();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(itemsChannel);
+      supabase.removeChannel(batchesChannel);
+    };
+  }, [toast]);
   const getSeverityIcon = (severity: string) => {
     switch (severity) {
       case "critical":
@@ -55,7 +193,13 @@ export default function Alerts() {
       </div>
 
       <div className="space-y-4">
-        {alerts.length === 0 ? (
+        {isLoading ? (
+          <Card className="border-primary/20">
+            <CardContent className="p-12 flex items-center justify-center">
+              <Loader2 className="h-8 w-8 animate-spin text-primary" />
+            </CardContent>
+          </Card>
+        ) : alerts.length === 0 ? (
           <Card className="border-primary/20">
             <CardContent className="p-12 text-center">
               <p className="text-muted-foreground">No alerts at this time</p>
