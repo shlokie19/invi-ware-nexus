@@ -1,11 +1,11 @@
 import { useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { LineChart, Line, AreaChart, Area, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from "recharts";
+import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from "recharts";
 import { useToast } from "@/hooks/use-toast";
 import { Download } from "lucide-react";
+import { supabase } from "@/integrations/supabase/client";
 
 const FLASK_BASE_URL = "http://localhost:5000";
 
@@ -15,11 +15,44 @@ export default function Analytics() {
   const [liveItemData, setLiveItemData] = useState<any[]>([]);
   const [isLoadingPrediction, setIsLoadingPrediction] = useState(false);
   const [items, setItems] = useState<any[]>([]);
-  const [categoryPerformance, setCategoryPerformance] = useState<any[]>([]);
-  const [reorderPatterns, setReorderPatterns] = useState<any[]>([]);
   
   const selectedItemData = liveItemData;
   const selectedItemInfo = items.find(item => item.id === selectedItem);
+
+  // Fetch items from database
+  useEffect(() => {
+    const fetchItems = async () => {
+      const { data, error } = await supabase
+        .from("items")
+        .select(`
+          id,
+          name,
+          subcategories (
+            name,
+            categories (
+              name
+            )
+          )
+        `)
+        .order("name");
+
+      if (error) {
+        console.error("Error fetching items:", error);
+        toast({
+          title: "Error",
+          description: "Failed to load items",
+          variant: "destructive",
+        });
+      } else {
+        setItems(data || []);
+        if (data && data.length > 0) {
+          setSelectedItem(data[0].id);
+        }
+      }
+    };
+
+    fetchItems();
+  }, [toast]);
 
   // Fetch live prediction from Flask backend
   useEffect(() => {
@@ -58,8 +91,6 @@ export default function Analytics() {
         generatedAt: new Date().toISOString(),
         selectedItem: selectedItemInfo?.name || "Unknown",
         stockPredictions: selectedItemData,
-        categoryPerformance,
-        reorderPatterns,
       };
 
       // Convert to CSV format
@@ -74,18 +105,6 @@ export default function Analytics() {
           csvContent += `${row.date},${row.actual || ""},${row.predicted}\n`;
         });
       }
-      
-      csvContent += "\n\nCategory Performance\n";
-      csvContent += "Category,Sales (₹),Growth (%)\n";
-      categoryPerformance.forEach(row => {
-        csvContent += `${row.category},${row.sales},${row.growth}\n`;
-      });
-      
-      csvContent += "\n\nReorder Patterns\n";
-      csvContent += "Week,Electronics,Food Items,Clothing\n";
-      reorderPatterns.forEach(row => {
-        csvContent += `${row.week},${row.electronics},${row.food},${row.clothing}\n`;
-      });
 
       // Create blob and download
       const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
@@ -124,14 +143,7 @@ export default function Analytics() {
         </Button>
       </div>
 
-      <Tabs defaultValue="prediction" className="space-y-4">
-        <TabsList className="grid w-full grid-cols-3">
-          <TabsTrigger value="prediction">Stock Prediction</TabsTrigger>
-          <TabsTrigger value="performance">Category Performance</TabsTrigger>
-          <TabsTrigger value="patterns">Reorder Patterns</TabsTrigger>
-        </TabsList>
-
-        <TabsContent value="prediction" className="space-y-4">
+      <div className="space-y-4">
           <Card className="border-primary/20">
             <CardHeader>
               <div className="flex items-start justify-between">
@@ -156,7 +168,7 @@ export default function Analytics() {
                   <SelectContent>
                     {items.map((item) => (
                       <SelectItem key={item.id} value={item.id}>
-                        {item.name} ({item.subcategory})
+                        {item.name} ({item.subcategories?.name || "N/A"})
                       </SelectItem>
                     ))}
                   </SelectContent>
@@ -245,82 +257,7 @@ export default function Analytics() {
               </CardContent>
             </Card>
           </div>
-        </TabsContent>
-
-        <TabsContent value="performance" className="space-y-4">
-          <Card className="border-primary/20">
-            <CardHeader>
-              <CardTitle>Category-wise Sales Performance</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <ResponsiveContainer width="100%" height={400}>
-                <BarChart data={categoryPerformance}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
-                  <XAxis dataKey="category" stroke="hsl(var(--muted-foreground))" />
-                  <YAxis stroke="hsl(var(--muted-foreground))" />
-                  <Tooltip
-                    contentStyle={{
-                      backgroundColor: "hsl(var(--card))",
-                      border: "1px solid hsl(var(--border))",
-                    }}
-                  />
-                  <Legend />
-                  <Bar dataKey="sales" fill="hsl(var(--primary))" name="Sales (₹)" />
-                  <Bar dataKey="growth" fill="hsl(var(--success))" name="Growth (%)" />
-                </BarChart>
-              </ResponsiveContainer>
-            </CardContent>
-          </Card>
-        </TabsContent>
-
-        <TabsContent value="patterns" className="space-y-4">
-          <Card className="border-primary/20">
-            <CardHeader>
-              <CardTitle>Reorder Patterns by Category</CardTitle>
-              <p className="text-sm text-muted-foreground">
-                Weekly reorder frequency trends
-              </p>
-            </CardHeader>
-            <CardContent>
-              <ResponsiveContainer width="100%" height={400}>
-                <LineChart data={reorderPatterns}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
-                  <XAxis dataKey="week" stroke="hsl(var(--muted-foreground))" />
-                  <YAxis stroke="hsl(var(--muted-foreground))" />
-                  <Tooltip
-                    contentStyle={{
-                      backgroundColor: "hsl(var(--card))",
-                      border: "1px solid hsl(var(--border))",
-                    }}
-                  />
-                  <Legend />
-                  <Line
-                    type="monotone"
-                    dataKey="electronics"
-                    stroke="hsl(var(--primary))"
-                    strokeWidth={2}
-                    name="Electronics"
-                  />
-                  <Line
-                    type="monotone"
-                    dataKey="food"
-                    stroke="hsl(var(--success))"
-                    strokeWidth={2}
-                    name="Food Items"
-                  />
-                  <Line
-                    type="monotone"
-                    dataKey="clothing"
-                    stroke="hsl(var(--warning))"
-                    strokeWidth={2}
-                    name="Clothing"
-                  />
-                </LineChart>
-              </ResponsiveContainer>
-            </CardContent>
-          </Card>
-        </TabsContent>
-      </Tabs>
+      </div>
     </div>
   );
 }
