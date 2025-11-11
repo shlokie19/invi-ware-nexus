@@ -1,4 +1,4 @@
-import { Home, Package, ShieldAlert, Bell, BarChart3 } from "lucide-react";
+import { Home, Package, ShieldAlert, Bell, BarChart3, History } from "lucide-react";
 import { NavLink } from "react-router-dom";
 import {
   Sidebar,
@@ -18,6 +18,7 @@ const navItems = [
   { title: "Verification", url: "/verification", icon: ShieldAlert },
   { title: "Alerts", url: "/alerts", icon: Bell },
   { title: "Analytics", url: "/analytics", icon: BarChart3 },
+  { title: "History", url: "/history", icon: History },
 ];
 
 export function AppSidebar() {
