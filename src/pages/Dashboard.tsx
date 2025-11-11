@@ -1,10 +1,12 @@
 import { StatCard } from "@/components/StatCard";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Package, AlertTriangle, TrendingUp, Layers, Loader2 } from "lucide-react";
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, LineChart, Line } from "recharts";
 import { useEffect, useState } from "react";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { format } from "date-fns";
 
 export default function Dashboard() {
   const [categoryData, setCategoryData] = useState<any[]>([]);
@@ -13,6 +15,10 @@ export default function Dashboard() {
   const [totalItems, setTotalItems] = useState(0);
   const [totalCategories, setTotalCategories] = useState(0);
   const [lowStockAlerts, setLowStockAlerts] = useState(0);
+  const [items, setItems] = useState<any[]>([]);
+  const [selectedItemId, setSelectedItemId] = useState<string>("");
+  const [stockHistoryData, setStockHistoryData] = useState<any[]>([]);
+  const [isLoadingHistory, setIsLoadingHistory] = useState(false);
   const { toast } = useToast();
 
   useEffect(() => {
@@ -64,12 +70,13 @@ export default function Dashboard() {
         })) || [];
         setCategoryData(catData);
 
-        // Fetch recent low stock alerts
+        // Fetch all items for dropdown
         const { data: allItems, error: alertError } = await supabase
           .from("items")
           .select(`
             id,
             name,
+            sku,
             quantity,
             reorder_level,
             subcategories (
@@ -79,18 +86,26 @@ export default function Dashboard() {
           .order("quantity", { ascending: true });
 
         if (!alertError && allItems) {
-          const lowStockItems = allItems
-            .filter(item => item.quantity <= item.reorder_level)
-            .slice(0, 5);
+          setItems(allItems);
           
-          const alertData = lowStockItems.map(item => ({
-            id: item.id,
-            message: `${item.name} is low on stock (${item.quantity} units)`,
-            time: "Just now",
-            severity: item.quantity === 0 ? "error" : "warning"
-          }));
-          setAlerts(alertData);
+          // Set first item as default selected
+          if (allItems.length > 0 && !selectedItemId) {
+            setSelectedItemId(allItems[0].id);
+          }
         }
+
+        // Fetch recent low stock alerts
+        const lowStockItems = allItems
+          ?.filter(item => item.quantity <= item.reorder_level)
+          .slice(0, 5) || [];
+        
+        const alertData = lowStockItems.map(item => ({
+          id: item.id,
+          message: `${item.name} is low on stock (${item.quantity} units)`,
+          time: "Just now",
+          severity: item.quantity === 0 ? "error" : "warning"
+        }));
+        setAlerts(alertData);
 
         setIsLoading(false);
       } catch (error) {
@@ -142,6 +157,44 @@ export default function Dashboard() {
       supabase.removeChannel(categoriesChannel);
     };
   }, [toast]);
+
+  // Fetch stock history when selected item changes
+  useEffect(() => {
+    const fetchStockHistory = async () => {
+      if (!selectedItemId) return;
+      
+      setIsLoadingHistory(true);
+      try {
+        const { data, error } = await supabase
+          .from("stock_history")
+          .select("*")
+          .eq("item_id", selectedItemId)
+          .order("created_at", { ascending: true })
+          .limit(50);
+
+        if (error) throw error;
+
+        const chartData = data?.map(record => ({
+          date: format(new Date(record.created_at), "MMM dd HH:mm"),
+          quantity: record.new_quantity,
+          change: record.quantity_change,
+        })) || [];
+
+        setStockHistoryData(chartData);
+      } catch (error) {
+        console.error("Failed to fetch stock history:", error);
+        toast({
+          title: "Error",
+          description: "Failed to load stock history",
+          variant: "destructive",
+        });
+      } finally {
+        setIsLoadingHistory(false);
+      }
+    };
+
+    fetchStockHistory();
+  }, [selectedItemId, toast]);
 
   return (
     <div className="space-y-6">
@@ -230,6 +283,67 @@ export default function Dashboard() {
                 </div>
               ))}
             </div>
+          )}
+        </CardContent>
+      </Card>
+
+      <Card className="border-primary/20">
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            Item Stock Level History
+            {isLoadingHistory && <Loader2 className="h-4 w-4 animate-spin" />}
+          </CardTitle>
+          <div className="mt-4">
+            <Select value={selectedItemId} onValueChange={setSelectedItemId}>
+              <SelectTrigger className="w-full md:w-[300px]">
+                <SelectValue placeholder="Select an item" />
+              </SelectTrigger>
+              <SelectContent>
+                {items.map((item) => (
+                  <SelectItem key={item.id} value={item.id}>
+                    {item.name} {item.sku ? `(${item.sku})` : ""}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        </CardHeader>
+        <CardContent>
+          {isLoadingHistory ? (
+            <div className="flex items-center justify-center h-[300px]">
+              <Loader2 className="h-8 w-8 animate-spin text-primary" />
+            </div>
+          ) : stockHistoryData.length === 0 ? (
+            <div className="flex items-center justify-center h-[300px] text-muted-foreground">
+              No stock history available for this item
+            </div>
+          ) : (
+            <ResponsiveContainer width="100%" height={300}>
+              <LineChart data={stockHistoryData}>
+                <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+                <XAxis 
+                  dataKey="date" 
+                  stroke="hsl(var(--muted-foreground))"
+                  style={{ fontSize: '12px' }}
+                />
+                <YAxis stroke="hsl(var(--muted-foreground))" />
+                <Tooltip
+                  contentStyle={{
+                    backgroundColor: "hsl(var(--card))",
+                    border: "1px solid hsl(var(--border))",
+                  }}
+                  labelStyle={{ color: "hsl(var(--foreground))" }}
+                />
+                <Line 
+                  type="monotone" 
+                  dataKey="quantity" 
+                  stroke="hsl(var(--primary))" 
+                  strokeWidth={2}
+                  dot={{ fill: "hsl(var(--primary))", r: 4 }}
+                  activeDot={{ r: 6 }}
+                />
+              </LineChart>
+            </ResponsiveContainer>
           )}
         </CardContent>
       </Card>
