@@ -184,7 +184,6 @@ export default function Inventory() {
     name: "", 
     sku: "", 
     unit: "pcs", 
-    quantity: 0, 
     reorderLevel: 15,
     supplierId: "",
     costPrice: 0,
@@ -540,7 +539,6 @@ export default function Inventory() {
         name: "", 
         sku: "", 
         unit: "pcs", 
-        quantity: 0, 
         reorderLevel: 15,
         supplierId: "",
         costPrice: 0,
@@ -569,8 +567,12 @@ export default function Inventory() {
     
     const isSkuValid = await validateSku(itemForm.sku, itemId);
     if (!isSkuValid) return;
+
+    // Validate new batches if any
+    const validNewBatches = itemForm.batches.filter(b => b.batchNumber.trim() && b.quantity > 0);
     
     try {
+      // Update item metadata
       const { error } = await supabase
         .from('items')
         .update({
@@ -587,12 +589,41 @@ export default function Inventory() {
 
       if (error) throw error;
 
+      // Add new batches if any
+      if (validNewBatches.length > 0) {
+        const batchInserts = validNewBatches.map(batch => ({
+          batch_number: batch.batchNumber,
+          quantity: batch.quantity,
+          expiry_date: batch.expiryDate || null,
+          item_id: itemId,
+        }));
+
+        const { error: batchError } = await supabase
+          .from('batches')
+          .insert(batchInserts);
+
+        if (batchError) throw batchError;
+
+        // Update item quantity by summing all batches
+        const { data: allBatches } = await supabase
+          .from('batches')
+          .select('quantity')
+          .eq('item_id', itemId);
+
+        if (allBatches) {
+          const totalQuantity = allBatches.reduce((sum, b) => sum + b.quantity, 0);
+          await supabase
+            .from('items')
+            .update({ quantity: totalQuantity })
+            .eq('id', itemId);
+        }
+      }
+
       setItemDialog({ open: false, mode: "add" });
       setItemForm({ 
         name: "", 
         sku: "", 
         unit: "pcs", 
-        quantity: 0, 
         reorderLevel: 15,
         supplierId: "",
         costPrice: 0,
@@ -906,7 +937,6 @@ export default function Inventory() {
                                 name: "", 
                                 sku: "", 
                                 unit: "pcs", 
-                                quantity: 0, 
                                 reorderLevel: 15,
                                 supplierId: "",
                                 costPrice: 0,
@@ -1053,7 +1083,6 @@ export default function Inventory() {
                                       name: item.name, 
                                       sku: item.sku || "", 
                                       unit: item.unit || "pcs", 
-                                      quantity: item.quantity, 
                                       reorderLevel: item.reorderLevel,
                                       supplierId: item.supplierId || "",
                                       costPrice: item.costPrice || 0,
@@ -1216,7 +1245,9 @@ export default function Inventory() {
           <DialogHeader>
             <DialogTitle>{itemDialog.mode === "add" ? "Add Item" : "Edit Item"}</DialogTitle>
             <DialogDescription>
-              {itemDialog.mode === "add" ? "Add a new item with batches to the inventory." : "Update item details."}
+              {itemDialog.mode === "add" 
+                ? "Add a new item with batches to the inventory." 
+                : "Update item details and add new batches if needed."}
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-4">
@@ -1326,87 +1357,94 @@ export default function Inventory() {
               </div>
             </div>
 
-            {/* Batches Section - Only for Add Mode */}
-            {itemDialog.mode === "add" && (
-              <div className="space-y-4 border-t pt-4">
-                <div className="flex items-center justify-between">
-                  <h3 className="font-medium text-sm">Batches *</h3>
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant="outline"
-                    onClick={() => {
-                      setItemForm({
-                        ...itemForm,
-                        batches: [...itemForm.batches, { batchNumber: "", quantity: 0, expiryDate: "" }]
-                      });
-                    }}
-                  >
-                    <Plus className="h-3 w-3 mr-1" />
-                    Add Batch
-                  </Button>
-                </div>
-                {itemForm.batches.map((batch, index) => (
-                  <div key={index} className="grid grid-cols-12 gap-2 items-end">
-                    <div className="col-span-4 space-y-2">
-                      <Label htmlFor={`batch-number-${index}`}>Batch Number</Label>
-                      <Input
-                        id={`batch-number-${index}`}
-                        value={batch.batchNumber}
-                        onChange={(e) => {
-                          const newBatches = [...itemForm.batches];
-                          newBatches[index].batchNumber = e.target.value;
-                          setItemForm({ ...itemForm, batches: newBatches });
-                        }}
-                        placeholder="Batch #"
-                      />
-                    </div>
-                    <div className="col-span-3 space-y-2">
-                      <Label htmlFor={`batch-qty-${index}`}>Quantity</Label>
-                      <Input
-                        id={`batch-qty-${index}`}
-                        type="number"
-                        value={batch.quantity}
-                        onChange={(e) => {
-                          const newBatches = [...itemForm.batches];
-                          newBatches[index].quantity = parseInt(e.target.value) || 0;
-                          setItemForm({ ...itemForm, batches: newBatches });
-                        }}
-                        placeholder="0"
-                      />
-                    </div>
-                    <div className="col-span-4 space-y-2">
-                      <Label htmlFor={`batch-expiry-${index}`}>Expiry Date (Optional)</Label>
-                      <Input
-                        id={`batch-expiry-${index}`}
-                        type="date"
-                        value={batch.expiryDate}
-                        onChange={(e) => {
-                          const newBatches = [...itemForm.batches];
-                          newBatches[index].expiryDate = e.target.value;
-                          setItemForm({ ...itemForm, batches: newBatches });
-                        }}
-                      />
-                    </div>
-                    {itemForm.batches.length > 1 && (
-                      <div className="col-span-1">
-                        <Button
-                          type="button"
-                          size="sm"
-                          variant="ghost"
-                          onClick={() => {
-                            const newBatches = itemForm.batches.filter((_, i) => i !== index);
-                            setItemForm({ ...itemForm, batches: newBatches });
-                          }}
-                        >
-                          <X className="h-4 w-4" />
-                        </Button>
-                      </div>
-                    )}
-                  </div>
-                ))}
+            {/* Batches Section */}
+            <div className="space-y-4 border-t pt-4">
+              <div className="flex items-center justify-between">
+                <h3 className="font-medium text-sm">
+                  {itemDialog.mode === "add" ? "Batches *" : "Add New Batches"}
+                </h3>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  onClick={() => {
+                    setItemForm({
+                      ...itemForm,
+                      batches: [...itemForm.batches, { batchNumber: "", quantity: 0, expiryDate: "" }]
+                    });
+                  }}
+                >
+                  <Plus className="h-3 w-3 mr-1" />
+                  Add Batch
+                </Button>
               </div>
-            )}
+              
+              {itemDialog.mode === "edit" && (
+                <div className="text-sm text-muted-foreground bg-muted/50 p-3 rounded-md">
+                  Add new batches to increase inventory. Existing batches are shown in the item details.
+                </div>
+              )}
+
+              {itemForm.batches.map((batch, index) => (
+                <div key={index} className="grid grid-cols-12 gap-2 items-end">
+                  <div className="col-span-4 space-y-2">
+                    <Label htmlFor={`batch-number-${index}`}>Batch Number</Label>
+                    <Input
+                      id={`batch-number-${index}`}
+                      value={batch.batchNumber}
+                      onChange={(e) => {
+                        const newBatches = [...itemForm.batches];
+                        newBatches[index].batchNumber = e.target.value;
+                        setItemForm({ ...itemForm, batches: newBatches });
+                      }}
+                      placeholder="Batch #"
+                    />
+                  </div>
+                  <div className="col-span-3 space-y-2">
+                    <Label htmlFor={`batch-qty-${index}`}>Quantity</Label>
+                    <Input
+                      id={`batch-qty-${index}`}
+                      type="number"
+                      value={batch.quantity}
+                      onChange={(e) => {
+                        const newBatches = [...itemForm.batches];
+                        newBatches[index].quantity = parseInt(e.target.value) || 0;
+                        setItemForm({ ...itemForm, batches: newBatches });
+                      }}
+                      placeholder="0"
+                    />
+                  </div>
+                  <div className="col-span-4 space-y-2">
+                    <Label htmlFor={`batch-expiry-${index}`}>Expiry Date (Optional)</Label>
+                    <Input
+                      id={`batch-expiry-${index}`}
+                      type="date"
+                      value={batch.expiryDate}
+                      onChange={(e) => {
+                        const newBatches = [...itemForm.batches];
+                        newBatches[index].expiryDate = e.target.value;
+                        setItemForm({ ...itemForm, batches: newBatches });
+                      }}
+                    />
+                  </div>
+                  {itemForm.batches.length > 1 && (
+                    <div className="col-span-1">
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="ghost"
+                        onClick={() => {
+                          const newBatches = itemForm.batches.filter((_, i) => i !== index);
+                          setItemForm({ ...itemForm, batches: newBatches });
+                        }}
+                      >
+                        <X className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => {
