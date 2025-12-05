@@ -4,7 +4,7 @@ import { AlertTriangle, AlertCircle, Info, CheckCircle, Loader2 } from "lucide-r
 import { Badge } from "@/components/ui/badge";
 import { useEffect, useState } from "react";
 import { useToast } from "@/hooks/use-toast";
-import { itemsDB, batchesDB, initializeData } from "@/lib/localStorage";
+import { itemsDB, batchesDB, initializeData } from "@/lib/linkedList";
 
 interface Alert {
   id: string;

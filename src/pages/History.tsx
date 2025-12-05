@@ -9,7 +9,7 @@ import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "
 import { Download, Search, TrendingUp, TrendingDown, Activity } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
 import { format, subDays } from "date-fns";
-import { stockHistoryDB, itemsDB, categoriesDB, subcategoriesDB, initializeData } from "@/lib/localStorage";
+import { stockHistoryDB, itemsDB, categoriesDB, subcategoriesDB, initializeData } from "@/lib/linkedList";
 
 interface HistoryRecord {
   id: string;

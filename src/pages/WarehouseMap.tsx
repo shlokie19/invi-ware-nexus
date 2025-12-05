@@ -7,7 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { locationsDB, itemsDB, subcategoriesDB, categoriesDB, stockHistoryDB, initializeData } from "@/lib/localStorage";
+import { locationsDB, itemsDB, subcategoriesDB, categoriesDB, stockHistoryDB, initializeData } from "@/lib/linkedList";
 
 interface Location {
   id: string;
