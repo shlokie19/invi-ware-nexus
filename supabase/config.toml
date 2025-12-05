@@ -1,4 +1,0 @@
-project_id = "rmdkaxortsesxcnmxmei"
-
-[functions.trigger-model-retrain]
-verify_jwt = false
