@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { stockHistoryDB } from "@/lib/localStorage";
+import { stockHistoryDB } from "@/lib/linkedList";
 
 interface ItemInsight {
   itemId: string;

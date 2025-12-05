@@ -12,7 +12,7 @@ import {
   itemsDB, 
   stockHistoryDB, 
   initializeData 
-} from "@/lib/localStorage";
+} from "@/lib/linkedList";
 
 export default function Dashboard() {
   const [categoryData, setCategoryData] = useState<any[]>([]);

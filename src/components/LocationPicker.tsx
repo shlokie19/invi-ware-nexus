@@ -3,7 +3,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { useToast } from "@/hooks/use-toast";
 import { Loader2, MapPin } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { locationsDB, itemsDB, initializeData } from "@/lib/localStorage";
+import { locationsDB, itemsDB, initializeData } from "@/lib/linkedList";
 
 interface Location {
   id: string;

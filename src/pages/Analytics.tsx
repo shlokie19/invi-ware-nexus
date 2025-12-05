@@ -5,7 +5,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { useToast } from "@/hooks/use-toast";
 import { Download } from "lucide-react";
 import { ItemPredictionChart } from "@/components/ItemPredictionChart";
-import { itemsDB, subcategoriesDB, stockHistoryDB, initializeData } from "@/lib/localStorage";
+import { itemsDB, subcategoriesDB, stockHistoryDB, initializeData } from "@/lib/linkedList";
 
 export default function Analytics() {
   const [selectedItem, setSelectedItem] = useState<string>("");

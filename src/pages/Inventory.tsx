@@ -39,7 +39,7 @@ import {
   adjustStock,
   initializeData,
   generateId,
-} from "@/lib/localStorage";
+} from "@/lib/linkedList";
 
 interface Batch {
   id: string;
