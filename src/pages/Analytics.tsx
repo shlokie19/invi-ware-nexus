@@ -272,7 +272,11 @@ export default function Analytics() {
               </>
             )}
           </Button>
-          <Button variant="outline" onClick={handleExportReport}>
+          <Button 
+            variant="default" 
+            onClick={handleExportReport}
+            className="bg-secondary hover:bg-secondary/90 text-secondary-foreground"
+          >
             <Download className="mr-2 h-4 w-4" />
             Export Report
           </Button>
