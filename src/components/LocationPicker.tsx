@@ -1,9 +1,9 @@
 import { useEffect, useState } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { Loader2, MapPin } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { locationsDB, itemsDB, initializeData } from "@/lib/localStorage";
 
 interface Location {
   id: string;
@@ -28,29 +28,22 @@ export function LocationPicker({ open, onOpenChange, onSelect, currentLocationId
   useEffect(() => {
     if (!open) return;
 
-    const fetchLocations = async () => {
+    const fetchLocations = () => {
       try {
-        const { data: locationData, error: locError } = await supabase
-          .from("locations")
-          .select("*")
-          .order("label");
+        initializeData();
+        
+        const locationData = locationsDB.getAll();
+        const itemData = itemsDB.getAll();
 
-        if (locError) throw locError;
-
-        const { data: itemData, error: itemError } = await supabase
-          .from("items")
-          .select("location_id, quantity");
-
-        if (itemError) throw itemError;
-
-        const enrichedLocations = locationData?.map(loc => {
-          const locItems = itemData?.filter(item => item.location_id === loc.id) || [];
+        const enrichedLocations = locationData.map(loc => {
+          const locItems = itemData.filter(item => item.location_id === loc.id);
           const totalQty = locItems.reduce((sum, item) => sum + item.quantity, 0);
           return {
             ...loc,
+            zone: loc.zone || 'Zone A',
             totalQuantity: totalQty,
           };
-        }) || [];
+        });
 
         setLocations(enrichedLocations);
         setIsLoading(false);

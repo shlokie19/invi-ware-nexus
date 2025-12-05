@@ -3,8 +3,8 @@ import { Button } from "@/components/ui/button";
 import { AlertTriangle, AlertCircle, Info, CheckCircle, Loader2 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { useEffect, useState } from "react";
-import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
+import { itemsDB, batchesDB, initializeData } from "@/lib/localStorage";
 
 interface Alert {
   id: string;
@@ -21,138 +21,80 @@ export default function Alerts() {
   const [isLoading, setIsLoading] = useState(true);
   const { toast } = useToast();
 
+  const fetchAlerts = () => {
+    try {
+      initializeData();
+      const alertsList: Alert[] = [];
+
+      // Get low stock items
+      const items = itemsDB.getAll();
+      items.forEach((item) => {
+        if (item.quantity <= item.reorder_level) {
+          alertsList.push({
+            id: `item-${item.id}`,
+            title: `Low Stock: ${item.name}`,
+            description: `Current stock: ${item.quantity} units (Reorder level: ${item.reorder_level})`,
+            severity: item.quantity === 0 ? "critical" : "warning",
+            timestamp: new Date().toLocaleString(),
+            category: "Inventory",
+            resolved: false,
+          });
+        }
+      });
+
+      // Get expiring batches (within 7 days)
+      const expiringBatches = batchesDB.getExpiringSoon(7);
+      expiringBatches.forEach((batch) => {
+        const item = items.find(i => i.id === batch.item_id);
+        if (batch.expiry_date) {
+          const daysUntilExpiry = Math.ceil(
+            (new Date(batch.expiry_date).getTime() - new Date().getTime()) /
+              (1000 * 60 * 60 * 24)
+          );
+          alertsList.push({
+            id: `batch-${batch.id}`,
+            title: `Expiring Soon: ${item?.name || "Unknown Item"}`,
+            description: `Batch ${batch.batch_number} expires in ${daysUntilExpiry} day(s) (${batch.quantity} units)`,
+            severity: daysUntilExpiry <= 3 ? "critical" : "warning",
+            timestamp: new Date().toLocaleString(),
+            category: "Expiry",
+            resolved: false,
+          });
+        }
+      });
+
+      // Sort by severity (critical first)
+      alertsList.sort((a, b) => {
+        if (a.severity === "critical" && b.severity !== "critical") return -1;
+        if (a.severity !== "critical" && b.severity === "critical") return 1;
+        return 0;
+      });
+
+      setAlerts(alertsList);
+      setIsLoading(false);
+    } catch (error) {
+      console.error("Failed to fetch alerts:", error);
+      toast({
+        title: "Error",
+        description: "Failed to load alerts",
+        variant: "destructive",
+      });
+      setIsLoading(false);
+    }
+  };
+
   useEffect(() => {
-    const fetchAlerts = async () => {
-      try {
-        const alertsList: Alert[] = [];
-
-        // Fetch low stock items
-        const { data: items, error: itemsError } = await supabase
-          .from("items")
-          .select(`
-            id,
-            name,
-            quantity,
-            reorder_level,
-            subcategories (
-              name
-            )
-          `);
-
-        if (itemsError) throw itemsError;
-
-        if (items) {
-          items.forEach((item) => {
-            if (item.quantity <= item.reorder_level) {
-              alertsList.push({
-                id: `item-${item.id}`,
-                title: `Low Stock: ${item.name}`,
-                description: `Current stock: ${item.quantity} units (Reorder level: ${item.reorder_level})`,
-                severity: item.quantity === 0 ? "critical" : "warning",
-                timestamp: new Date().toLocaleString(),
-                category: "Inventory",
-                resolved: false,
-              });
-            }
-          });
-        }
-
-        // Fetch expiring batches (within 7 days)
-        const sevenDaysFromNow = new Date();
-        sevenDaysFromNow.setDate(sevenDaysFromNow.getDate() + 7);
-
-        const { data: batches, error: batchesError } = await supabase
-          .from("batches")
-          .select(`
-            id,
-            batch_number,
-            expiry_date,
-            quantity,
-            items (
-              name
-            )
-          `)
-          .lte("expiry_date", sevenDaysFromNow.toISOString().split("T")[0])
-          .gte("expiry_date", new Date().toISOString().split("T")[0]);
-
-        if (batchesError) throw batchesError;
-
-        if (batches) {
-          batches.forEach((batch: any) => {
-            const daysUntilExpiry = Math.ceil(
-              (new Date(batch.expiry_date).getTime() - new Date().getTime()) /
-                (1000 * 60 * 60 * 24)
-            );
-            alertsList.push({
-              id: `batch-${batch.id}`,
-              title: `Expiring Soon: ${batch.items?.name || "Unknown Item"}`,
-              description: `Batch ${batch.batch_number} expires in ${daysUntilExpiry} day(s) (${batch.quantity} units)`,
-              severity: daysUntilExpiry <= 3 ? "critical" : "warning",
-              timestamp: new Date().toLocaleString(),
-              category: "Expiry",
-              resolved: false,
-            });
-          });
-        }
-
-        // Sort by severity (critical first)
-        alertsList.sort((a, b) => {
-          if (a.severity === "critical" && b.severity !== "critical") return -1;
-          if (a.severity !== "critical" && b.severity === "critical") return 1;
-          return 0;
-        });
-
-        setAlerts(alertsList);
-        setIsLoading(false);
-      } catch (error) {
-        console.error("Failed to fetch alerts:", error);
-        toast({
-          title: "Error",
-          description: "Failed to load alerts",
-          variant: "destructive",
-        });
-        setIsLoading(false);
-      }
-    };
-
     fetchAlerts();
 
-    // Set up real-time subscriptions
-    const itemsChannel = supabase
-      .channel("alerts-items")
-      .on(
-        "postgres_changes",
-        {
-          event: "*",
-          schema: "public",
-          table: "items",
-        },
-        () => {
-          fetchAlerts();
-        }
-      )
-      .subscribe();
-
-    const batchesChannel = supabase
-      .channel("alerts-batches")
-      .on(
-        "postgres_changes",
-        {
-          event: "*",
-          schema: "public",
-          table: "batches",
-        },
-        () => {
-          fetchAlerts();
-        }
-      )
-      .subscribe();
+    const unsubItems = itemsDB.subscribe(fetchAlerts);
+    const unsubBatches = batchesDB.subscribe(fetchAlerts);
 
     return () => {
-      supabase.removeChannel(itemsChannel);
-      supabase.removeChannel(batchesChannel);
+      unsubItems();
+      unsubBatches();
     };
-  }, [toast]);
+  }, []);
+
   const getSeverityIcon = (severity: string) => {
     switch (severity) {
       case "critical":

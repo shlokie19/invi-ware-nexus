@@ -1,12 +1,18 @@
 import { StatCard } from "@/components/StatCard";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Package, AlertTriangle, TrendingUp, Layers, Loader2 } from "lucide-react";
+import { Package, AlertTriangle, Layers, Loader2 } from "lucide-react";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, LineChart, Line } from "recharts";
 import { useEffect, useState } from "react";
 import { useToast } from "@/hooks/use-toast";
-import { supabase } from "@/integrations/supabase/client";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { format } from "date-fns";
+import { 
+  categoriesDB, 
+  subcategoriesDB, 
+  itemsDB, 
+  stockHistoryDB, 
+  initializeData 
+} from "@/lib/localStorage";
 
 export default function Dashboard() {
   const [categoryData, setCategoryData] = useState<any[]>([]);
@@ -21,179 +27,104 @@ export default function Dashboard() {
   const [isLoadingHistory, setIsLoadingHistory] = useState(false);
   const { toast } = useToast();
 
-  useEffect(() => {
-    const fetchDashboardData = async () => {
-      try {
-        // Fetch total items
-        const { count: itemCount, error: itemError } = await supabase
-          .from("items")
-          .select("*", { count: "exact", head: true });
-
-        if (itemError) throw itemError;
-        setTotalItems(itemCount || 0);
-
-        // Fetch total categories
-        const { count: categoryCount, error: categoryError } = await supabase
-          .from("categories")
-          .select("*", { count: "exact", head: true });
-
-        if (categoryError) throw categoryError;
-        setTotalCategories(categoryCount || 0);
-
-        // Fetch low stock alerts
-        const { data: items, error: lowStockError } = await supabase
-          .from("items")
-          .select("id, quantity, reorder_level");
-
-        if (lowStockError) throw lowStockError;
-        const lowStock = items?.filter(item => item.quantity <= item.reorder_level).length || 0;
-        setLowStockAlerts(lowStock);
-
-        // Fetch category distribution
-        const { data: categories, error: catError } = await supabase
-          .from("categories")
-          .select(`
-            id,
-            name,
-            subcategories (
-              items (
-                id
-              )
-            )
-          `);
-
-        if (catError) throw catError;
-        
-        const catData = categories?.map(cat => ({
-          name: cat.name,
-          items: cat.subcategories?.reduce((sum: number, sub: any) => sum + (sub.items?.length || 0), 0) || 0
-        })) || [];
-        setCategoryData(catData);
-
-        // Fetch all items for dropdown
-        const { data: allItems, error: alertError } = await supabase
-          .from("items")
-          .select(`
-            id,
-            name,
-            sku,
-            quantity,
-            reorder_level,
-            subcategories (
-              name
-            )
-          `)
-          .order("quantity", { ascending: true });
-
-        if (!alertError && allItems) {
-          setItems(allItems);
-          
-          // Set first item as default selected
-          if (allItems.length > 0 && !selectedItemId) {
-            setSelectedItemId(allItems[0].id);
-          }
-        }
-
-        // Fetch recent low stock alerts
-        const lowStockItems = allItems
-          ?.filter(item => item.quantity <= item.reorder_level)
-          .slice(0, 5) || [];
-        
-        const alertData = lowStockItems.map(item => ({
-          id: item.id,
-          message: `${item.name} is low on stock (${item.quantity} units)`,
-          time: "Just now",
-          severity: item.quantity === 0 ? "error" : "warning"
-        }));
-        setAlerts(alertData);
-
-        setIsLoading(false);
-      } catch (error) {
-        console.error("Failed to fetch dashboard data:", error);
-        toast({
-          title: "Error",
-          description: "Failed to load dashboard data",
-          variant: "destructive",
-        });
-        setIsLoading(false);
+  const fetchDashboardData = () => {
+    try {
+      initializeData();
+      
+      const allItems = itemsDB.getAll();
+      const allCategories = categoriesDB.getAll();
+      const allSubcategories = subcategoriesDB.getAll();
+      
+      setTotalItems(allItems.length);
+      setTotalCategories(allCategories.length);
+      
+      const lowStock = allItems.filter(item => item.quantity <= item.reorder_level).length;
+      setLowStockAlerts(lowStock);
+      
+      // Category distribution
+      const catData = allCategories.map(cat => {
+        const catSubcategories = allSubcategories.filter(sub => sub.category_id === cat.id);
+        const itemCount = catSubcategories.reduce((sum, sub) => {
+          return sum + allItems.filter(item => item.subcategory_id === sub.id).length;
+        }, 0);
+        return { name: cat.name, items: itemCount };
+      });
+      setCategoryData(catData);
+      
+      // Items with subcategory info
+      const itemsWithInfo = allItems.map(item => {
+        const subcategory = allSubcategories.find(s => s.id === item.subcategory_id);
+        return { ...item, subcategories: subcategory ? { name: subcategory.name } : null };
+      }).sort((a, b) => a.quantity - b.quantity);
+      
+      setItems(itemsWithInfo);
+      
+      if (itemsWithInfo.length > 0 && !selectedItemId) {
+        setSelectedItemId(itemsWithInfo[0].id);
       }
-    };
+      
+      // Low stock alerts
+      const lowStockItems = itemsWithInfo.filter(item => item.quantity <= item.reorder_level).slice(0, 5);
+      const alertData = lowStockItems.map(item => ({
+        id: item.id,
+        message: `${item.name} is low on stock (${item.quantity} units)`,
+        time: "Just now",
+        severity: item.quantity === 0 ? "error" : "warning"
+      }));
+      setAlerts(alertData);
+      
+      setIsLoading(false);
+    } catch (error) {
+      console.error("Failed to fetch dashboard data:", error);
+      toast({
+        title: "Error",
+        description: "Failed to load dashboard data",
+        variant: "destructive",
+      });
+      setIsLoading(false);
+    }
+  };
 
+  useEffect(() => {
     fetchDashboardData();
-
-    // Set up real-time subscriptions
-    const itemsChannel = supabase
-      .channel("dashboard-items")
-      .on(
-        "postgres_changes",
-        {
-          event: "*",
-          schema: "public",
-          table: "items",
-        },
-        () => {
-          fetchDashboardData();
-        }
-      )
-      .subscribe();
-
-    const categoriesChannel = supabase
-      .channel("dashboard-categories")
-      .on(
-        "postgres_changes",
-        {
-          event: "*",
-          schema: "public",
-          table: "categories",
-        },
-        () => {
-          fetchDashboardData();
-        }
-      )
-      .subscribe();
-
+    
+    // Subscribe to changes
+    const unsubItems = itemsDB.subscribe(fetchDashboardData);
+    const unsubCategories = categoriesDB.subscribe(fetchDashboardData);
+    
     return () => {
-      supabase.removeChannel(itemsChannel);
-      supabase.removeChannel(categoriesChannel);
+      unsubItems();
+      unsubCategories();
     };
-  }, [toast]);
+  }, []);
 
   // Fetch stock history when selected item changes
   useEffect(() => {
-    const fetchStockHistory = async () => {
-      if (!selectedItemId) return;
+    if (!selectedItemId) return;
+    
+    setIsLoadingHistory(true);
+    try {
+      const history = stockHistoryDB.getByItem(selectedItemId)
+        .sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime())
+        .slice(-50);
       
-      setIsLoadingHistory(true);
-      try {
-        const { data, error } = await supabase
-          .from("stock_history")
-          .select("*")
-          .eq("item_id", selectedItemId)
-          .order("created_at", { ascending: true })
-          .limit(50);
-
-        if (error) throw error;
-
-        const chartData = data?.map(record => ({
-          date: format(new Date(record.created_at), "MMM dd HH:mm"),
-          quantity: record.new_quantity,
-          change: record.quantity_change,
-        })) || [];
-
-        setStockHistoryData(chartData);
-      } catch (error) {
-        console.error("Failed to fetch stock history:", error);
-        toast({
-          title: "Error",
-          description: "Failed to load stock history",
-          variant: "destructive",
-        });
-      } finally {
-        setIsLoadingHistory(false);
-      }
-    };
-
-    fetchStockHistory();
+      const chartData = history.map(record => ({
+        date: format(new Date(record.created_at), "MMM dd HH:mm"),
+        quantity: record.new_quantity,
+        change: record.quantity_change,
+      }));
+      
+      setStockHistoryData(chartData);
+    } catch (error) {
+      console.error("Failed to fetch stock history:", error);
+      toast({
+        title: "Error",
+        description: "Failed to load stock history",
+        variant: "destructive",
+      });
+    } finally {
+      setIsLoadingHistory(false);
+    }
   }, [selectedItemId, toast]);
 
   return (
@@ -252,6 +183,8 @@ export default function Dashboard() {
             <div className="flex items-center justify-center h-[100px]">
               <Loader2 className="h-6 w-6 animate-spin text-primary" />
             </div>
+          ) : alerts.length === 0 ? (
+            <div className="text-center py-8 text-muted-foreground">No alerts</div>
           ) : (
             <div className="space-y-3">
               {alerts.map((alert: any) => (
