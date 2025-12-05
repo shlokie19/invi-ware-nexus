@@ -4,8 +4,8 @@ import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import { Download } from "lucide-react";
-import { supabase } from "@/integrations/supabase/client";
 import { ItemPredictionChart } from "@/components/ItemPredictionChart";
+import { itemsDB, subcategoriesDB, stockHistoryDB, initializeData } from "@/lib/localStorage";
 
 export default function Analytics() {
   const [selectedItem, setSelectedItem] = useState<string>("");
@@ -16,97 +16,60 @@ export default function Analytics() {
   
   const selectedItemInfo = items.find(item => item.id === selectedItem);
 
-  // Fetch items and stock history from database
-  useEffect(() => {
-    const fetchData = async () => {
-      setIsLoading(true);
-      try {
-        // Fetch items with quantity and reorder_level
-        const { data: itemsData, error: itemsError } = await supabase
-          .from("items")
-          .select(`
-            id,
-            name,
-            quantity,
-            reorder_level,
-            subcategories (
-              name,
-              categories (
-                name
-              )
-            )
-          `)
-          .order("name");
-
-        if (itemsError) {
-          console.error("Error fetching items:", itemsError);
-          toast({
-            title: "Error",
-            description: "Failed to load items",
-            variant: "destructive",
-          });
-        } else {
-          setItems(itemsData || []);
-          if (itemsData && itemsData.length > 0) {
-            setSelectedItem(itemsData[0].id);
-          }
-        }
-
-        // Fetch stock history
-        const { data: historyData, error: historyError } = await supabase
-          .from("stock_history")
-          .select("item_id, created_at, quantity_changed, change_type")
-          .order("created_at", { ascending: false });
-
-        if (historyError) {
-          console.error("Error fetching stock history:", historyError);
-        } else {
-          setStockHistory(historyData || []);
-        }
-      } finally {
-        setIsLoading(false);
+  const fetchData = () => {
+    setIsLoading(true);
+    try {
+      initializeData();
+      
+      const allItems = itemsDB.getAll();
+      const allSubcategories = subcategoriesDB.getAll();
+      
+      const itemsWithInfo = allItems.map(item => {
+        const subcategory = allSubcategories.find(s => s.id === item.subcategory_id);
+        return {
+          ...item,
+          subcategories: subcategory ? { name: subcategory.name } : null
+        };
+      }).sort((a, b) => a.name.localeCompare(b.name));
+      
+      setItems(itemsWithInfo);
+      
+      if (itemsWithInfo.length > 0 && !selectedItem) {
+        setSelectedItem(itemsWithInfo[0].id);
       }
-    };
+      
+      // Get all stock history
+      const history = stockHistoryDB.getAll().map(h => ({
+        item_id: h.item_id,
+        created_at: h.created_at,
+        quantity_changed: h.quantity_change,
+        change_type: h.change_type
+      }));
+      
+      setStockHistory(history);
+    } catch (error) {
+      console.error("Error fetching data:", error);
+      toast({
+        title: "Error",
+        description: "Failed to load data",
+        variant: "destructive",
+      });
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
+  useEffect(() => {
     fetchData();
-
-    // Set up real-time subscription for items
-    const itemsChannel = supabase
-      .channel('items-changes')
-      .on(
-        'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'items'
-        },
-        () => {
-          fetchData();
-        }
-      )
-      .subscribe();
-
-    // Set up real-time subscription for stock_history
-    const historyChannel = supabase
-      .channel('history-changes')
-      .on(
-        'postgres_changes',
-        {
-          event: 'INSERT',
-          schema: 'public',
-          table: 'stock_history'
-        },
-        () => {
-          fetchData();
-        }
-      )
-      .subscribe();
-
+    
+    const unsubItems = itemsDB.subscribe(fetchData);
+    const unsubHistory = stockHistoryDB.subscribe(fetchData);
+    
     return () => {
-      supabase.removeChannel(itemsChannel);
-      supabase.removeChannel(historyChannel);
+      unsubItems();
+      unsubHistory();
     };
-  }, [toast]);
+  }, []);
 
   // Filter stock history for selected item
   const selectedItemHistory = stockHistory.filter(
@@ -124,21 +87,18 @@ export default function Analytics() {
         return;
       }
 
-      // Convert to CSV format
       let csvContent = "Analytics Report\n";
       csvContent += `Generated: ${new Date().toLocaleString()}\n\n`;
       csvContent += `Item: ${selectedItemInfo.name}\n`;
       csvContent += `Current Stock: ${selectedItemInfo.quantity} units\n`;
       csvContent += `Reorder Level: ${selectedItemInfo.reorder_level} units\n\n`;
       
-      // Stock History
       csvContent += "Stock History\n";
       csvContent += "Date,Change Type,Quantity Changed\n";
       selectedItemHistory.forEach(entry => {
         csvContent += `${new Date(entry.created_at).toLocaleString()},${entry.change_type},${entry.quantity_changed}\n`;
       });
 
-      // Create blob and download
       const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
       const link = document.createElement("a");
       const url = URL.createObjectURL(blob);

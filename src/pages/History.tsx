@@ -1,5 +1,4 @@
 import { useState, useEffect } from "react";
-import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -10,6 +9,7 @@ import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "
 import { Download, Search, TrendingUp, TrendingDown, Activity } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
 import { format, subDays } from "date-fns";
+import { stockHistoryDB, itemsDB, categoriesDB, subcategoriesDB, initializeData } from "@/lib/localStorage";
 
 interface HistoryRecord {
   id: string;
@@ -78,23 +78,16 @@ export default function History() {
     applyFilters();
   }, [records, filters]);
 
-  const loadInitialData = async () => {
+  const loadInitialData = () => {
     setLoading(true);
     try {
-      // Load categories
-      const { data: categoriesData } = await supabase.from("categories").select("id, name").order("name");
-      if (categoriesData) setCategories(categoriesData);
+      initializeData();
+      
+      setCategories(categoriesDB.getAll().map(c => ({ id: c.id, name: c.name })));
+      setSubcategories(subcategoriesDB.getAll().map(s => ({ id: s.id, name: s.name })));
+      setItems(itemsDB.getAll().map(i => ({ id: i.id, name: i.name, sku: i.sku || '' })));
 
-      // Load subcategories
-      const { data: subcategoriesData } = await supabase.from("subcategories").select("id, name").order("name");
-      if (subcategoriesData) setSubcategories(subcategoriesData);
-
-      // Load items
-      const { data: itemsData } = await supabase.from("items").select("id, name, sku").order("name");
-      if (itemsData) setItems(itemsData);
-
-      // Load history
-      await loadHistory();
+      loadHistory();
     } catch (error) {
       console.error("Error loading data:", error);
       toast({ title: "Error", description: "Failed to load history data", variant: "destructive" });
@@ -103,21 +96,17 @@ export default function History() {
     }
   };
 
-  const loadHistory = async () => {
+  const loadHistory = () => {
     try {
-      const { data, error } = await supabase
-        .from("vw_stock_history_detailed")
-        .select("*")
-        .order("created_at", { ascending: false });
-
-      if (error) throw error;
-
-      if (data) {
-        setRecords(data as HistoryRecord[]);
-        // Extract unique suppliers
-        const uniqueSuppliers = Array.from(new Set(data.map((r: any) => r.supplier_name).filter(Boolean))) as string[];
-        setSuppliers(uniqueSuppliers);
-      }
+      const detailedHistory = stockHistoryDB.getDetailed()
+        .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+      
+      setRecords(detailedHistory as HistoryRecord[]);
+      
+      const uniqueSuppliers = Array.from(
+        new Set(detailedHistory.map((r) => r.supplier_name).filter(Boolean))
+      ) as string[];
+      setSuppliers(uniqueSuppliers);
     } catch (error) {
       console.error("Error loading history:", error);
       toast({ title: "Error", description: "Failed to load transaction history", variant: "destructive" });
@@ -127,7 +116,6 @@ export default function History() {
   const applyFilters = () => {
     let filtered = [...records];
 
-    // Date range
     if (filters.dateFrom) {
       filtered = filtered.filter((r) => new Date(r.created_at) >= new Date(filters.dateFrom));
     }
@@ -137,32 +125,26 @@ export default function History() {
       filtered = filtered.filter((r) => new Date(r.created_at) <= endDate);
     }
 
-    // Change types
     if (filters.changeTypes.length > 0) {
       filtered = filtered.filter((r) => filters.changeTypes.includes(r.change_type));
     }
 
-    // Category
     if (filters.category && filters.category !== "all") {
       filtered = filtered.filter((r) => r.category_name === filters.category);
     }
 
-    // Subcategory
     if (filters.subcategory && filters.subcategory !== "all") {
       filtered = filtered.filter((r) => r.subcategory_name === filters.subcategory);
     }
 
-    // Item
     if (filters.item && filters.item !== "all") {
       filtered = filtered.filter((r) => r.item_id === filters.item);
     }
 
-    // Supplier
     if (filters.supplier && filters.supplier !== "all") {
       filtered = filtered.filter((r) => r.supplier_name === filters.supplier);
     }
 
-    // Search
     if (filters.search) {
       const searchLower = filters.search.toLowerCase();
       filtered = filtered.filter(
@@ -357,60 +339,6 @@ export default function History() {
             </div>
 
             <div className="space-y-2">
-              <label className="text-sm font-medium">Subcategory</label>
-              <Select
-                value={filters.subcategory}
-                onValueChange={(value) => setFilters({ ...filters, subcategory: value })}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="All subcategories" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All subcategories</SelectItem>
-                  {subcategories.map((sub) => (
-                    <SelectItem key={sub.id} value={sub.name}>
-                      {sub.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div className="space-y-2">
-              <label className="text-sm font-medium">Item</label>
-              <Select value={filters.item} onValueChange={(value) => setFilters({ ...filters, item: value })}>
-                <SelectTrigger>
-                  <SelectValue placeholder="All items" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All items</SelectItem>
-                  {items.map((item) => (
-                    <SelectItem key={item.id} value={item.id}>
-                      {item.name} ({item.sku})
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div className="space-y-2">
-              <label className="text-sm font-medium">Supplier</label>
-              <Select value={filters.supplier} onValueChange={(value) => setFilters({ ...filters, supplier: value })}>
-                <SelectTrigger>
-                  <SelectValue placeholder="All suppliers" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All suppliers</SelectItem>
-                  {suppliers.map((supplier) => (
-                    <SelectItem key={supplier} value={supplier}>
-                      {supplier}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div className="space-y-2 md:col-span-2">
               <label className="text-sm font-medium">Search</label>
               <div className="relative">
                 <Search className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
@@ -479,11 +407,9 @@ export default function History() {
                     <TableRow>
                       <TableHead>Date/Time</TableHead>
                       <TableHead>Item</TableHead>
-                      <TableHead>Category</TableHead>
                       <TableHead>Type</TableHead>
-                      <TableHead className="text-right">Qty Change</TableHead>
-                      <TableHead className="text-right">New Qty</TableHead>
-                      <TableHead>Supplier</TableHead>
+                      <TableHead>Qty Change</TableHead>
+                      <TableHead>New Qty</TableHead>
                       <TableHead>Note</TableHead>
                     </TableRow>
                   </TableHeader>
@@ -494,8 +420,8 @@ export default function History() {
                         className="cursor-pointer hover:bg-muted/50"
                         onClick={() => setSelectedRecord(record)}
                       >
-                        <TableCell className="font-medium">
-                          {format(new Date(record.created_at), "MMM dd, yyyy HH:mm")}
+                        <TableCell className="whitespace-nowrap">
+                          {format(new Date(record.created_at), "MMM dd, HH:mm")}
                         </TableCell>
                         <TableCell>
                           <div>
@@ -503,32 +429,21 @@ export default function History() {
                             <div className="text-xs text-muted-foreground">{record.sku}</div>
                           </div>
                         </TableCell>
-                        <TableCell>
-                          <div className="text-sm">
-                            {record.category_name} › {record.subcategory_name}
-                          </div>
-                        </TableCell>
                         <TableCell>{getChangeTypeBadge(record.change_type)}</TableCell>
-                        <TableCell className="text-right">{getQuantityDisplay(record.quantity_changed)}</TableCell>
-                        <TableCell className="text-right">{record.new_quantity_after_change}</TableCell>
-                        <TableCell>{record.supplier_name || "—"}</TableCell>
-                        <TableCell className="max-w-[200px] truncate" title={record.note || ""}>
-                          {record.note || "—"}
-                        </TableCell>
+                        <TableCell>{getQuantityDisplay(record.quantity_changed)}</TableCell>
+                        <TableCell>{record.new_quantity_after_change}</TableCell>
+                        <TableCell className="max-w-[200px] truncate">{record.note || "-"}</TableCell>
                       </TableRow>
                     ))}
                   </TableBody>
                 </Table>
               </div>
 
-              {/* Pagination */}
               {totalPages > 1 && (
                 <div className="flex items-center justify-between mt-4">
-                  <div className="text-sm text-muted-foreground">
-                    Showing {(currentPage - 1) * ITEMS_PER_PAGE + 1} to{" "}
-                    {Math.min(currentPage * ITEMS_PER_PAGE, filteredRecords.length)} of {filteredRecords.length}{" "}
-                    transactions
-                  </div>
+                  <p className="text-sm text-muted-foreground">
+                    Page {currentPage} of {totalPages}
+                  </p>
                   <div className="flex gap-2">
                     <Button
                       variant="outline"
@@ -554,75 +469,45 @@ export default function History() {
         </CardContent>
       </Card>
 
-      {/* Details Sheet */}
-      <Sheet open={!!selectedRecord} onOpenChange={(open) => !open && setSelectedRecord(null)}>
-        <SheetContent className="overflow-y-auto">
+      <Sheet open={!!selectedRecord} onOpenChange={() => setSelectedRecord(null)}>
+        <SheetContent>
           <SheetHeader>
             <SheetTitle>Transaction Details</SheetTitle>
-            <SheetDescription>Full information about this stock movement</SheetDescription>
+            <SheetDescription>Full details of this stock movement</SheetDescription>
           </SheetHeader>
           {selectedRecord && (
             <div className="mt-6 space-y-4">
-              <div>
-                <label className="text-sm font-medium text-muted-foreground">Date & Time</label>
-                <p className="text-sm">{format(new Date(selectedRecord.created_at), "PPpp")}</p>
-              </div>
-
-              <div>
-                <label className="text-sm font-medium text-muted-foreground">Item</label>
-                <p className="text-sm font-medium">{selectedRecord.item_name}</p>
-              </div>
-
-              <div>
-                <label className="text-sm font-medium text-muted-foreground">SKU</label>
-                <p className="text-sm">{selectedRecord.sku}</p>
-              </div>
-
-              <div>
-                <label className="text-sm font-medium text-muted-foreground">Unit</label>
-                <p className="text-sm">{selectedRecord.unit}</p>
-              </div>
-
-              <div>
-                <label className="text-sm font-medium text-muted-foreground">Category</label>
-                <p className="text-sm">
-                  {selectedRecord.category_name} › {selectedRecord.subcategory_name}
-                </p>
-              </div>
-
-              <div>
-                <label className="text-sm font-medium text-muted-foreground">Change Type</label>
-                <div className="mt-1">{getChangeTypeBadge(selectedRecord.change_type)}</div>
-              </div>
-
-              <div>
-                <label className="text-sm font-medium text-muted-foreground">Quantity Changed</label>
-                <p className="text-sm">{getQuantityDisplay(selectedRecord.quantity_changed)}</p>
-              </div>
-
-              <div>
-                <label className="text-sm font-medium text-muted-foreground">New Quantity After Change</label>
-                <p className="text-sm">{selectedRecord.new_quantity_after_change}</p>
-              </div>
-
-              {selectedRecord.supplier_name && (
+              <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="text-sm font-medium text-muted-foreground">Supplier</label>
-                  <p className="text-sm">{selectedRecord.supplier_name}</p>
+                  <p className="text-sm text-muted-foreground">Date/Time</p>
+                  <p className="font-medium">{format(new Date(selectedRecord.created_at), "PPpp")}</p>
                 </div>
-              )}
-
+                <div>
+                  <p className="text-sm text-muted-foreground">Change Type</p>
+                  {getChangeTypeBadge(selectedRecord.change_type)}
+                </div>
+              </div>
+              <div>
+                <p className="text-sm text-muted-foreground">Item</p>
+                <p className="font-medium">{selectedRecord.item_name}</p>
+                <p className="text-sm text-muted-foreground">{selectedRecord.sku}</p>
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <p className="text-sm text-muted-foreground">Quantity Change</p>
+                  <p className="font-medium text-lg">{getQuantityDisplay(selectedRecord.quantity_changed)}</p>
+                </div>
+                <div>
+                  <p className="text-sm text-muted-foreground">New Quantity</p>
+                  <p className="font-medium text-lg">{selectedRecord.new_quantity_after_change}</p>
+                </div>
+              </div>
               {selectedRecord.note && (
                 <div>
-                  <label className="text-sm font-medium text-muted-foreground">Note</label>
-                  <p className="text-sm">{selectedRecord.note}</p>
+                  <p className="text-sm text-muted-foreground">Note</p>
+                  <p className="font-medium">{selectedRecord.note}</p>
                 </div>
               )}
-
-              <div>
-                <label className="text-sm font-medium text-muted-foreground">Transaction ID</label>
-                <p className="text-xs font-mono text-muted-foreground">{selectedRecord.id}</p>
-              </div>
             </div>
           )}
         </SheetContent>

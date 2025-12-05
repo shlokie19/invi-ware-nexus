@@ -1,11 +1,5 @@
 import { useState, useEffect } from "react";
-import { supabase } from "@/integrations/supabase/client";
-
-interface StockHistoryEntry {
-  quantity_change: number;
-  change_type: string;
-  created_at: string;
-}
+import { stockHistoryDB } from "@/lib/localStorage";
 
 interface ItemInsight {
   itemId: string;
@@ -45,29 +39,28 @@ export function useInventoryInsights(
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const computeInsights = async () => {
+    const computeInsights = () => {
       if (items.length === 0) {
         setLoading(false);
         return;
       }
 
       try {
-        // Fetch stock history for all items
         const cutoffDate = new Date();
         cutoffDate.setDate(cutoffDate.getDate() - HISTORY_DAYS);
 
-        const { data: historyData } = await supabase
-          .from("stock_history")
-          .select("item_id, quantity_change, change_type, created_at")
-          .gte("created_at", cutoffDate.toISOString())
-          .in("change_type", ["sale", "damaged"]);
+        const allHistory = stockHistoryDB.getAll();
+        const historyData = allHistory.filter(
+          (h) =>
+            new Date(h.created_at) >= cutoffDate &&
+            (h.change_type === "sale" || h.change_type === "damaged")
+        );
 
         const insights = new Map<string, ItemInsight>();
         const daysLeftArray: number[] = [];
 
-        // Compute per-item insights
         for (const item of items) {
-          const itemHistory = (historyData || []).filter((h) => h.item_id === item.id);
+          const itemHistory = historyData.filter((h) => h.item_id === item.id);
 
           let avgDailySales = 0;
           if (itemHistory.length > 0) {
@@ -80,7 +73,6 @@ export function useInventoryInsights(
             ).size;
             avgDailySales = totalSold / Math.max(1, uniqueDays);
           } else {
-            // Fallback: estimate from reorder level
             avgDailySales = Math.max(1, Math.round(item.reorderLevel / 7));
           }
 
@@ -88,10 +80,10 @@ export function useInventoryInsights(
           if (item.quantity === 0) {
             predictedDaysLeft = 0;
           } else if (avgDailySales === 0) {
-            predictedDaysLeft = 30; // Cap at 30+ days
+            predictedDaysLeft = 30;
           } else {
             predictedDaysLeft = Math.round(item.quantity / avgDailySales);
-            predictedDaysLeft = Math.min(predictedDaysLeft, 30); // Cap at 30
+            predictedDaysLeft = Math.min(predictedDaysLeft, 30);
           }
 
           const suggestedReorderQty = Math.ceil(avgDailySales * 14);
@@ -108,7 +100,6 @@ export function useInventoryInsights(
 
         setItemInsights(insights);
 
-        // Compute health score
         const totalItems = items.length;
         const lowStockItems = items.filter((i) => i.quantity <= i.reorderLevel).length;
         const avgDaysLeft = daysLeftArray.length > 0

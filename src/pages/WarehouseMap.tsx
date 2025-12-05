@@ -1,6 +1,5 @@
 import { useEffect, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { Loader2, Package, MapPin } from "lucide-react";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
@@ -8,6 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { locationsDB, itemsDB, subcategoriesDB, categoriesDB, stockHistoryDB, initializeData } from "@/lib/localStorage";
 
 interface Location {
   id: string;
@@ -27,42 +27,37 @@ export default function WarehouseMap() {
   const [targetLocationId, setTargetLocationId] = useState<string>("");
   const { toast } = useToast();
 
-  const fetchLocations = async () => {
+  const fetchLocations = () => {
     try {
-      const { data: locationData, error: locError } = await supabase
-        .from("locations")
-        .select("*")
-        .order("label");
+      initializeData();
+      
+      const locationData = locationsDB.getAll();
+      const itemData = itemsDB.getAll();
+      const subcategories = subcategoriesDB.getAll();
+      const categories = categoriesDB.getAll();
 
-      if (locError) throw locError;
-
-      const { data: itemData, error: itemError } = await supabase
-        .from("items")
-        .select(`
-          id,
-          name,
-          sku,
-          quantity,
-          location_id,
-          subcategories (
-            name,
-            categories (
-              name
-            )
-          )
-        `);
-
-      if (itemError) throw itemError;
-
-      const enrichedLocations = locationData?.map(loc => {
-        const locItems = itemData?.filter(item => item.location_id === loc.id) || [];
+      const enrichedLocations = locationData.map(loc => {
+        const locItems = itemData
+          .filter(item => item.location_id === loc.id)
+          .map(item => {
+            const subcategory = subcategories.find(s => s.id === item.subcategory_id);
+            const category = subcategory ? categories.find(c => c.id === subcategory.category_id) : null;
+            return {
+              ...item,
+              subcategories: subcategory ? {
+                name: subcategory.name,
+                categories: category ? { name: category.name } : null
+              } : null
+            };
+          });
         const totalQty = locItems.reduce((sum, item) => sum + item.quantity, 0);
         return {
           ...loc,
+          zone: loc.zone || 'Zone A',
           items: locItems,
           totalQuantity: totalQty,
         };
-      }) || [];
+      });
 
       setLocations(enrichedLocations);
       setIsLoading(false);
@@ -80,17 +75,12 @@ export default function WarehouseMap() {
   useEffect(() => {
     fetchLocations();
 
-    const channel = supabase
-      .channel("warehouse-map")
-      .on(
-        "postgres_changes",
-        { event: "*", schema: "public", table: "items" },
-        () => fetchLocations()
-      )
-      .subscribe();
+    const unsubItems = itemsDB.subscribe(fetchLocations);
+    const unsubLocations = locationsDB.subscribe(fetchLocations);
 
     return () => {
-      supabase.removeChannel(channel);
+      unsubItems();
+      unsubLocations();
     };
   }, []);
 
@@ -101,21 +91,16 @@ export default function WarehouseMap() {
     return "bg-destructive/30 hover:bg-destructive/40 border-destructive";
   };
 
-  const handleMoveItem = async () => {
+  const handleMoveItem = () => {
     if (!itemToMove || !targetLocationId) return;
 
     try {
       const oldLocation = locations.find(loc => loc.id === itemToMove.location_id);
       const newLocation = locations.find(loc => loc.id === targetLocationId);
 
-      const { error } = await supabase
-        .from("items")
-        .update({ location_id: targetLocationId })
-        .eq("id", itemToMove.id);
+      itemsDB.update(itemToMove.id, { location_id: targetLocationId });
 
-      if (error) throw error;
-
-      await supabase.from("stock_history").insert({
+      stockHistoryDB.create({
         item_id: itemToMove.id,
         quantity_change: 0,
         previous_quantity: itemToMove.quantity,
@@ -123,6 +108,7 @@ export default function WarehouseMap() {
         action: "UPDATE",
         change_type: "move",
         note: `Moved from ${oldLocation?.label || "unassigned"} to ${newLocation?.label}`,
+        notes: null,
       });
 
       toast({
