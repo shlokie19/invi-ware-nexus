@@ -4,7 +4,15 @@ import { AlertTriangle, AlertCircle, Info, CheckCircle, Loader2 } from "lucide-r
 import { Badge } from "@/components/ui/badge";
 import { useEffect, useState } from "react";
 import { useToast } from "@/hooks/use-toast";
+import { useNavigate } from "react-router-dom";
 import { itemsDB, batchesDB, initializeData } from "@/lib/linkedList";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+} from "@/components/ui/dialog";
 
 interface Alert {
   id: string;
@@ -19,7 +27,10 @@ interface Alert {
 export default function Alerts() {
   const [alerts, setAlerts] = useState<Alert[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [acknowledgedAlerts, setAcknowledgedAlerts] = useState<Set<string>>(new Set());
+  const [selectedAlert, setSelectedAlert] = useState<Alert | null>(null);
   const { toast } = useToast();
+  const navigate = useNavigate();
 
   const fetchAlerts = () => {
     try {
@@ -117,6 +128,27 @@ export default function Alerts() {
     }
   };
 
+  const handleViewDetails = (alert: Alert) => {
+    setSelectedAlert(alert);
+  };
+
+  const handleAcknowledge = (alertId: string) => {
+    setAcknowledgedAlerts(prev => new Set(prev).add(alertId));
+    toast({
+      title: "Alert Acknowledged",
+      description: "The alert has been marked as resolved.",
+    });
+  };
+
+  const handleGoToInventory = () => {
+    setSelectedAlert(null);
+    navigate("/inventory");
+  };
+
+  const isAlertResolved = (alert: Alert) => {
+    return alert.resolved || acknowledgedAlerts.has(alert.id);
+  };
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -126,10 +158,10 @@ export default function Alerts() {
         </div>
         <div className="flex gap-2">
           <Badge variant="destructive" className="h-8">
-            {alerts.filter((a) => a.severity === "critical" && !a.resolved).length} Critical
+            {alerts.filter((a) => a.severity === "critical" && !isAlertResolved(a)).length} Critical
           </Badge>
           <Badge variant="outline" className="h-8 border-warning text-warning">
-            {alerts.filter((a) => a.severity === "warning" && !a.resolved).length} Warning
+            {alerts.filter((a) => a.severity === "warning" && !isAlertResolved(a)).length} Warning
           </Badge>
         </div>
       </div>
@@ -152,7 +184,7 @@ export default function Alerts() {
           <Card
             key={alert.id}
             className={`border-2 transition-all hover:shadow-lg ${
-              alert.resolved ? "opacity-60" : getSeverityStyles(alert.severity)
+              isAlertResolved(alert) ? "opacity-60" : getSeverityStyles(alert.severity)
             }`}
           >
             <CardContent className="p-4">
@@ -162,7 +194,7 @@ export default function Alerts() {
                   <div className="flex-1">
                     <div className="flex items-center gap-2 mb-1">
                       <h3 className="font-semibold">{alert.title}</h3>
-                      {alert.resolved && (
+                      {isAlertResolved(alert) && (
                         <Badge variant="outline" className="border-success text-success">
                           <CheckCircle className="h-3 w-3 mr-1" />
                           Resolved
@@ -179,12 +211,12 @@ export default function Alerts() {
                   </div>
                 </div>
                 <div className="flex gap-2">
-                  {!alert.resolved && (
+                  {!isAlertResolved(alert) && (
                     <>
-                      <Button size="sm" variant="outline">
+                      <Button size="sm" variant="outline" onClick={() => handleViewDetails(alert)}>
                         View Details
                       </Button>
-                      <Button size="sm" className="bg-primary hover:bg-primary/90">
+                      <Button size="sm" className="bg-primary hover:bg-primary/90" onClick={() => handleAcknowledge(alert.id)}>
                         Acknowledge
                       </Button>
                     </>
@@ -196,6 +228,45 @@ export default function Alerts() {
           ))
         )}
       </div>
+
+      {/* Alert Details Dialog */}
+      <Dialog open={!!selectedAlert} onOpenChange={(open) => !open && setSelectedAlert(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              {selectedAlert && getSeverityIcon(selectedAlert.severity)}
+              {selectedAlert?.title}
+            </DialogTitle>
+            <DialogDescription>
+              {selectedAlert?.description}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="grid grid-cols-2 gap-4 text-sm">
+              <div>
+                <span className="text-muted-foreground">Category:</span>
+                <p className="font-medium">{selectedAlert?.category}</p>
+              </div>
+              <div>
+                <span className="text-muted-foreground">Severity:</span>
+                <p className="font-medium capitalize">{selectedAlert?.severity}</p>
+              </div>
+              <div>
+                <span className="text-muted-foreground">Detected:</span>
+                <p className="font-medium">{selectedAlert?.timestamp}</p>
+              </div>
+            </div>
+            <div className="flex justify-end gap-2 pt-4">
+              <Button variant="outline" onClick={() => setSelectedAlert(null)}>
+                Close
+              </Button>
+              <Button onClick={handleGoToInventory}>
+                Go to Inventory
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
