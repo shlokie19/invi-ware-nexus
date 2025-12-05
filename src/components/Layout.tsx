@@ -9,7 +9,7 @@ export function Layout({ children }: { children: ReactNode }) {
         <AppSidebar />
         <div className="flex-1 flex flex-col">
           <header className="h-14 border-b border-border flex items-center px-4 bg-card">
-            <SidebarTrigger className="mr-4" />
+            <SidebarTrigger className="mr-4 bg-primary text-primary-foreground hover:bg-primary/90 rounded-md p-2" />
             <h2 className="text-sm font-medium text-muted-foreground">Warehouse Automation Dashboard</h2>
           </header>
           <main className="flex-1 overflow-auto bg-background p-6">
