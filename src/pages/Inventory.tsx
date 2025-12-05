@@ -761,6 +761,60 @@ export default function Inventory() {
       </AlertDialog>
 
       <LocationPicker open={locationPickerOpen} onOpenChange={setLocationPickerOpen} onSelect={(id, label) => setItemForm({ ...itemForm, locationId: id, locationLabel: label })} currentLocationId={itemForm.locationId} />
+
+      {/* Expiry Alerts Dialog */}
+      <Dialog open={expiryAlertsDialog} onOpenChange={setExpiryAlertsDialog}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Bell className="h-5 w-5 text-destructive" />
+              Expiring Batches ({expiringBatchesCount})
+            </DialogTitle>
+            <DialogDescription>
+              Batches expiring within {expiryThreshold} days
+            </DialogDescription>
+          </DialogHeader>
+          <div className="max-h-[400px] overflow-y-auto space-y-3">
+            {categories.flatMap(cat =>
+              cat.subcategories.flatMap(sub =>
+                sub.items.flatMap(item =>
+                  item.batches
+                    .filter(batch => batch.isExpiringSoon)
+                    .map(batch => (
+                      <div key={batch.id} className="p-3 border border-destructive/30 rounded-lg bg-destructive/5">
+                        <div className="flex justify-between items-start">
+                          <div>
+                            <div className="font-medium">{item.name}</div>
+                            <div className="text-sm text-muted-foreground">
+                              Batch: {batch.batchNumber}
+                            </div>
+                          </div>
+                          <Badge variant="destructive">
+                            {batch.expiryDate}
+                          </Badge>
+                        </div>
+                        <div className="mt-2 text-sm">
+                          <span className="text-muted-foreground">Quantity:</span> {batch.quantity} {item.unit}
+                        </div>
+                        <div className="text-sm">
+                          <span className="text-muted-foreground">Category:</span> {cat.name} → {sub.name}
+                        </div>
+                      </div>
+                    ))
+                )
+              )
+            )}
+            {expiringBatchesCount === 0 && (
+              <div className="text-center py-8 text-muted-foreground">
+                No expiring batches
+              </div>
+            )}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setExpiryAlertsDialog(false)}>Close</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
