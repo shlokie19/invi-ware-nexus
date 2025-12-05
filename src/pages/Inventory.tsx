@@ -482,7 +482,7 @@ export default function Inventory() {
         </div>
         <div className="flex gap-2">
           {expiringBatchesCount > 0 && (
-            <Button variant="outline" onClick={() => setExpiryAlertsDialog(true)}>
+            <Button variant="destructive" onClick={() => setExpiryAlertsDialog(true)}>
               <Bell className="mr-2 h-4 w-4" />
               {expiringBatchesCount} Expiring
             </Button>
