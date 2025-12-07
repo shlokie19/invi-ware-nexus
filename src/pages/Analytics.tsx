@@ -317,7 +317,7 @@ export default function Analytics() {
               </>
             )}
           </Button>
-          <Button variant="outline" onClick={handleExportReport}>
+          <Button variant="secondary" onClick={handleExportReport} className="border border-border">
             <Download className="mr-2 h-4 w-4" />
             Export Report
           </Button>
