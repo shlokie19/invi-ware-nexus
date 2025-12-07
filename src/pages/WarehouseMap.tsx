@@ -98,6 +98,26 @@ export default function WarehouseMap() {
       const oldLocation = locations.find(loc => loc.id === itemToMove.location_id);
       const newLocation = locations.find(loc => loc.id === targetLocationId);
 
+      if (!newLocation) {
+        toast({
+          title: "Error",
+          description: "Target location not found",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      // Check if moving would exceed capacity
+      const newTotalAfterMove = newLocation.totalQuantity + itemToMove.quantity;
+      if (newTotalAfterMove > newLocation.capacity) {
+        toast({
+          title: "Capacity Exceeded",
+          description: `Cannot move ${itemToMove.quantity} units. ${newLocation.label} only has ${newLocation.capacity - newLocation.totalQuantity} units of space available.`,
+          variant: "destructive",
+        });
+        return;
+      }
+
       itemsDB.update(itemToMove.id, { location_id: targetLocationId });
 
       stockHistoryDB.create({
@@ -107,13 +127,13 @@ export default function WarehouseMap() {
         new_quantity: itemToMove.quantity,
         action: "UPDATE",
         change_type: "move",
-        note: `Moved from ${oldLocation?.label || "unassigned"} to ${newLocation?.label}`,
+        note: `Moved from ${oldLocation?.label || "unassigned"} to ${newLocation.label}`,
         notes: null,
       });
 
       toast({
         title: "Success",
-        description: `Item moved to ${newLocation?.label}`,
+        description: `Item moved to ${newLocation.label}`,
       });
 
       setMoveDialogOpen(false);
