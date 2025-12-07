@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Upload, CheckCircle, XCircle, AlertTriangle, Loader2, Settings, Eye } from "lucide-react";
+import { Upload, CheckCircle, XCircle, AlertTriangle, Loader2, Settings, Eye, Info } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 
 interface VerificationResult {
@@ -92,7 +92,11 @@ export default function Verification() {
       const base64Data = preview.split(',')[1];
       const mediaType = preview.split(';')[0].split(':')[1];
 
-      const response = await fetch('https://api.anthropic.com/v1/messages', {
+      // Use a CORS proxy for development
+      const proxyUrl = 'https://corsproxy.io/?';
+      const apiUrl = 'https://api.anthropic.com/v1/messages';
+
+      const response = await fetch(proxyUrl + encodeURIComponent(apiUrl), {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -149,8 +153,9 @@ Rules:
       });
 
       if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error?.message || 'API request failed');
+        const errorText = await response.text();
+        console.error('API Error:', errorText);
+        throw new Error('API request failed. Check console for details.');
       }
 
       const data = await response.json();
@@ -196,7 +201,7 @@ Rules:
       console.error('Verification error:', error);
       toast({
         title: "Verification Failed",
-        description: error instanceof Error ? error.message : "An error occurred during verification.",
+        description: error instanceof Error ? error.message : "Network error. Please check your connection and API key.",
         variant: "destructive",
       });
     } finally {
@@ -254,6 +259,19 @@ Rules:
           </CardContent>
         </Card>
       )}
+
+      {/* Important Note about CORS */}
+      <Card className="border-yellow-200 bg-yellow-50">
+        <CardContent className="pt-6">
+          <div className="flex items-start gap-3">
+            <Info className="w-5 h-5 text-yellow-600 flex-shrink-0 mt-0.5" />
+            <div className="text-sm text-yellow-900">
+              <strong>Note:</strong> This demo uses a CORS proxy (corsproxy.io) to enable browser-based API calls. 
+              In production, API calls should be made from a backend server for security.
+            </div>
+          </div>
+        </CardContent>
+      </Card>
 
       <div className="grid gap-6 md:grid-cols-2">
         {/* Upload Section */}
