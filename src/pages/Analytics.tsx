@@ -585,27 +585,6 @@ export default function Analytics() {
         )}
       </div>
 
-      {/* Info Footer */}
-      <Card className="border-blue-200 bg-blue-50">
-        <CardContent className="pt-6">
-          <div className="flex items-start gap-3">
-            <AlertCircle className="w-5 h-5 text-blue-600 flex-shrink-0 mt-0.5" />
-            <div className="text-sm text-blue-900">
-              <strong>About ML Predictions:</strong> The system uses <strong>TensorFlow.js with LSTM neural networks</strong> for time series forecasting. 
-              When you select "Neural Network" mode, it trains a deep learning model (50 epochs) on your historical data for each item. 
-              The model learns patterns in stock movements and predicts future levels with training loss metrics. 
-              For items with insufficient data (&lt;12 records), it falls back to statistical methods.
-              <div className="mt-2">
-                <strong>Method Comparison:</strong>
-                <ul className="list-disc list-inside mt-1 space-y-1">
-                  <li><strong>Neural Network (LSTM):</strong> Slower but more accurate for complex patterns. Requires 12+ data points. Shows training metrics.</li>
-                  <li><strong>Statistical:</strong> Fast, uses linear regression. Good for simple trends. Works with 3+ data points.</li>
-                </ul>
-              </div>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
     </div>
   );
 }
