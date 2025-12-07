@@ -1,4 +1,4 @@
-import { Home, Package, ShieldAlert, Bell, BarChart3, History, Map } from "lucide-react";
+import { Home, Package, Bell, BarChart3, History, Map } from "lucide-react";
 import { NavLink } from "react-router-dom";
 import {
   Sidebar,
@@ -16,7 +16,6 @@ const navItems = [
   { title: "Dashboard", url: "/", icon: Home },
   { title: "Inventory", url: "/inventory", icon: Package },
   { title: "Warehouse Map", url: "/warehouse-map", icon: Map },
-  { title: "Verification", url: "/verification", icon: ShieldAlert },
   { title: "Alerts", url: "/alerts", icon: Bell },
   { title: "Analytics", url: "/analytics", icon: BarChart3 },
   { title: "History", url: "/history", icon: History },
