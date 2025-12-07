@@ -6,7 +6,27 @@ import { useToast } from "@/hooks/use-toast";
 import { Download, Brain, Loader2, TrendingUp, TrendingDown, Minus, AlertCircle } from "lucide-react";
 import { ItemPredictionChart } from "@/components/ItemPredictionChart";
 import { itemsDB, subcategoriesDB, stockHistoryDB, initializeData } from "@/lib/linkedList";
-import { InventoryPredictor } from "@/lib/ml-predictor";
+import { RealMLInventoryPredictor } from "@/lib/real-ml-predictor";
+
+interface MLResults {
+  itemsProcessed: number;
+  avgConfidence: number;
+  criticalAlerts: number;
+  neuralNetworkCount: number;
+  statisticalCount: number;
+  totalTrainingTime: number;
+  predictions: Array<{
+    name: string;
+    current: number;
+    predicted: number;
+    confidence: number;
+    trend: string;
+    daysUntilReorder: number | null;
+    method: string;
+    trainingLoss: number;
+    trainingTime: number;
+  }>;
+}
 
 export default function Analytics() {
   const [selectedItem, setSelectedItem] = useState<string>("");
@@ -16,7 +36,9 @@ export default function Analytics() {
   const [isLoading, setIsLoading] = useState(false);
   const [isRunningML, setIsRunningML] = useState(false);
   const [mlProgress, setMlProgress] = useState(0);
-  const [mlResults, setMlResults] = useState<any>(null);
+  const [mlMethod, setMlMethod] = useState<'neural_network' | 'statistical'>('neural_network');
+  const [trainingProgress, setTrainingProgress] = useState<string>('');
+  const [mlResults, setMlResults] = useState<MLResults | null>(null);
   
   const selectedItemInfo = items.find(item => item.id === selectedItem);
 
@@ -86,29 +108,37 @@ export default function Analytics() {
     setIsRunningML(true);
     setMlProgress(0);
     setMlResults(null);
+    setTrainingProgress('');
 
     try {
-      const predictor = new InventoryPredictor();
+      const predictor = new RealMLInventoryPredictor();
       const allItems = itemsDB.getAll();
       
-      setMlProgress(20);
+      setMlProgress(10);
+      setTrainingProgress('Initializing ML model...');
       
       let processed = 0;
       const totalItems = allItems.length;
-      const predictions = [];
+      const predictions: MLResults['predictions'] = [];
       let totalConfidence = 0;
       let criticalAlerts = 0;
+      let neuralNetworkCount = 0;
+      let statisticalCount = 0;
+      let totalTrainingTime = 0;
 
       for (const item of allItems) {
         // Get history for this item
         const history = stockHistoryDB.getByItem(item.id);
         
-        // Run prediction
+        setTrainingProgress(`Training model for ${item.name}...`);
+        
+        // Run prediction with real ML
         const prediction = await predictor.predictStock(
           item.quantity,
           item.reorder_level,
           history,
-          30 // predict 30 days ahead
+          30,
+          mlMethod === 'neural_network' // Use neural network or statistical
         );
         
         // Update item with predictions
@@ -125,10 +155,20 @@ export default function Analytics() {
           predicted: prediction.predicted_stock,
           confidence: prediction.prediction_confidence,
           trend: prediction.prediction_trend,
-          daysUntilReorder: prediction.days_until_reorder
+          daysUntilReorder: prediction.days_until_reorder,
+          method: prediction.method,
+          trainingLoss: prediction.model_metrics.training_loss,
+          trainingTime: prediction.model_metrics.training_time_ms
         });
         
         totalConfidence += prediction.prediction_confidence;
+        totalTrainingTime += prediction.model_metrics.training_time_ms;
+        
+        if (prediction.method === 'neural_network') {
+          neuralNetworkCount++;
+        } else {
+          statisticalCount++;
+        }
         
         // Check if predicted stock falls below reorder level
         if (prediction.predicted_stock <= item.reorder_level) {
@@ -136,19 +176,23 @@ export default function Analytics() {
         }
         
         processed++;
-        setMlProgress(20 + (processed / totalItems) * 70);
+        setMlProgress(10 + (processed / totalItems) * 80);
         
         // Small delay to show progress
-        await new Promise(resolve => setTimeout(resolve, 100));
+        await new Promise(resolve => setTimeout(resolve, 50));
       }
       
       setMlProgress(100);
+      setTrainingProgress('Complete!');
       
       // Set results
       setMlResults({
         itemsProcessed: totalItems,
         avgConfidence: Math.round(totalConfidence / totalItems),
         criticalAlerts,
+        neuralNetworkCount,
+        statisticalCount,
+        totalTrainingTime: Math.round(totalTrainingTime),
         predictions: predictions.slice(0, 5) // Show top 5
       });
       
@@ -157,7 +201,7 @@ export default function Analytics() {
       
       toast({
         title: "ML Predictions Complete",
-        description: `Successfully analyzed ${totalItems} items with ${Math.round(totalConfidence / totalItems)}% average confidence.`,
+        description: `Successfully analyzed ${totalItems} items using ${mlMethod === 'neural_network' ? 'Neural Networks' : 'Statistical Methods'}.`,
       });
       
     } catch (error) {
@@ -169,6 +213,7 @@ export default function Analytics() {
       });
     } finally {
       setIsRunningML(false);
+      setTrainingProgress('');
     }
   };
 
@@ -254,6 +299,18 @@ export default function Analytics() {
           <p className="text-muted-foreground">ML-driven insights and predictions</p>
         </div>
         <div className="flex gap-2">
+          <div className="flex items-center gap-2">
+            <label className="text-sm font-medium">Method:</label>
+            <select
+              value={mlMethod}
+              onChange={(e) => setMlMethod(e.target.value as 'neural_network' | 'statistical')}
+              disabled={isRunningML}
+              className="px-3 py-1 border rounded-md text-sm"
+            >
+              <option value="neural_network">Neural Network (LSTM)</option>
+              <option value="statistical">Statistical (Fast)</option>
+            </select>
+          </div>
           <Button 
             variant="default" 
             onClick={runMLPredictions}
@@ -263,7 +320,7 @@ export default function Analytics() {
             {isRunningML ? (
               <>
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                Running...
+                Training...
               </>
             ) : (
               <>
@@ -272,11 +329,7 @@ export default function Analytics() {
               </>
             )}
           </Button>
-          <Button 
-            variant="default" 
-            onClick={handleExportReport}
-            className="bg-secondary hover:bg-secondary/90 text-secondary-foreground"
-          >
+          <Button variant="outline" onClick={handleExportReport}>
             <Download className="mr-2 h-4 w-4" />
             Export Report
           </Button>
@@ -289,8 +342,8 @@ export default function Analytics() {
           <CardContent className="pt-6">
             <div className="space-y-2">
               <div className="flex items-center justify-between text-sm">
-                <span className="font-medium text-blue-900">Processing ML Predictions...</span>
-                <span className="text-blue-700">{mlProgress}%</span>
+                <span className="font-medium text-blue-900">{trainingProgress || 'Processing ML Predictions...'}</span>
+                <span className="text-blue-700">{mlProgress.toFixed(0)}%</span>
               </div>
               <div className="w-full bg-blue-200 rounded-full h-2">
                 <div
@@ -298,6 +351,9 @@ export default function Analytics() {
                   style={{ width: `${mlProgress}%` }}
                 />
               </div>
+              {mlMethod === 'neural_network' && (
+                <p className="text-xs text-blue-700">Training LSTM neural network for each item...</p>
+              )}
             </div>
           </CardContent>
         </Card>
@@ -306,7 +362,7 @@ export default function Analytics() {
       {/* ML Results Summary */}
       {mlResults && (
         <div className="space-y-4">
-          <div className="grid gap-4 md:grid-cols-3">
+          <div className="grid gap-4 md:grid-cols-4">
             <Card className="border-blue-200 bg-blue-50">
               <CardHeader>
                 <CardTitle className="text-sm font-medium text-muted-foreground">
@@ -333,6 +389,21 @@ export default function Analytics() {
                 <p className="text-xs text-muted-foreground mt-1">Prediction accuracy</p>
               </CardContent>
             </Card>
+            <Card className="border-purple-200 bg-purple-50">
+              <CardHeader>
+                <CardTitle className="text-sm font-medium text-muted-foreground">
+                  Neural Network
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="text-3xl font-bold text-purple-600">
+                  {mlResults.neuralNetworkCount}
+                </div>
+                <p className="text-xs text-muted-foreground mt-1">
+                  {mlResults.statisticalCount} statistical
+                </p>
+              </CardContent>
+            </Card>
             <Card className="border-red-200 bg-red-50">
               <CardHeader>
                 <CardTitle className="text-sm font-medium text-muted-foreground">
@@ -348,6 +419,33 @@ export default function Analytics() {
             </Card>
           </div>
 
+          {/* Training Metrics */}
+          {mlMethod === 'neural_network' && mlResults.totalTrainingTime > 0 && (
+            <Card className="border-purple-200 bg-purple-50">
+              <CardHeader>
+                <CardTitle className="text-sm">Neural Network Training Metrics</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="grid grid-cols-3 gap-4 text-sm">
+                  <div>
+                    <div className="text-muted-foreground">Total Training Time</div>
+                    <div className="font-medium text-purple-900">
+                      {(mlResults.totalTrainingTime / 1000).toFixed(2)}s
+                    </div>
+                  </div>
+                  <div>
+                    <div className="text-muted-foreground">Model Type</div>
+                    <div className="font-medium text-purple-900">LSTM (50 epochs)</div>
+                  </div>
+                  <div>
+                    <div className="text-muted-foreground">Framework</div>
+                    <div className="font-medium text-purple-900">TensorFlow.js</div>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
           {/* Top Predictions */}
           <Card>
             <CardHeader>
@@ -355,7 +453,7 @@ export default function Analytics() {
             </CardHeader>
             <CardContent>
               <div className="space-y-4">
-                {mlResults.predictions.map((pred: any, idx: number) => (
+                {mlResults.predictions.map((pred, idx) => (
                   <div key={idx} className="flex items-center justify-between p-4 border rounded-lg hover:bg-gray-50 transition-colors">
                     <div className="space-y-1">
                       <div className="font-medium">{pred.name}</div>
@@ -368,6 +466,14 @@ export default function Analytics() {
                           {pred.confidence}% confidence
                         </span>
                       </div>
+                      <div className="text-xs text-muted-foreground">
+                        {pred.method === 'neural_network' ? '🧠 Neural Network' : '📊 Statistical'}
+                      </div>
+                      {pred.method === 'neural_network' && pred.trainingLoss !== undefined && (
+                        <div className="text-xs text-purple-600">
+                          Loss: {pred.trainingLoss?.toFixed(4)} | Time: {pred.trainingTime}ms
+                        </div>
+                      )}
                     </div>
                     <div className="text-right space-y-1">
                       <div className="text-sm text-muted-foreground">Current → Predicted</div>
@@ -497,10 +603,17 @@ export default function Analytics() {
           <div className="flex items-start gap-3">
             <AlertCircle className="w-5 h-5 text-blue-600 flex-shrink-0 mt-0.5" />
             <div className="text-sm text-blue-900">
-              <strong>About ML Predictions:</strong> The system uses TensorFlow.js to analyze 
-              historical stock movements (sales, restocks, damages) and predict future inventory 
-              levels. Predictions consider usage patterns, trends, and volatility in your data. 
-              Click "Run ML Predictions" to update forecasts for all items.
+              <strong>About ML Predictions:</strong> The system uses <strong>TensorFlow.js with LSTM neural networks</strong> for time series forecasting. 
+              When you select "Neural Network" mode, it trains a deep learning model (50 epochs) on your historical data for each item. 
+              The model learns patterns in stock movements and predicts future levels with training loss metrics. 
+              For items with insufficient data (&lt;12 records), it falls back to statistical methods.
+              <div className="mt-2">
+                <strong>Method Comparison:</strong>
+                <ul className="list-disc list-inside mt-1 space-y-1">
+                  <li><strong>Neural Network (LSTM):</strong> Slower but more accurate for complex patterns. Requires 12+ data points. Shows training metrics.</li>
+                  <li><strong>Statistical:</strong> Fast, uses linear regression. Good for simple trends. Works with 3+ data points.</li>
+                </ul>
+              </div>
             </div>
           </div>
         </CardContent>
