@@ -139,9 +139,6 @@ export function ItemPredictionChart({ item, stockHistory }: ItemPredictionChartP
         </div>
       )}
 
-      <div className="text-xs text-muted-foreground italic">
-        Simulated prediction (demo only) - Based on recent sales history
-      </div>
 
       <ResponsiveContainer width="100%" height={200}>
         <LineChart data={chartData.data}>
