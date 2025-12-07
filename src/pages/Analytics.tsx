@@ -299,18 +299,6 @@ export default function Analytics() {
           <p className="text-muted-foreground">ML-driven insights and predictions</p>
         </div>
         <div className="flex gap-2">
-          <div className="flex items-center gap-2">
-            <label className="text-sm font-medium">Method:</label>
-            <select
-              value={mlMethod}
-              onChange={(e) => setMlMethod(e.target.value as 'neural_network' | 'statistical')}
-              disabled={isRunningML}
-              className="px-3 py-1 border rounded-md text-sm"
-            >
-              <option value="neural_network">Neural Network (LSTM)</option>
-              <option value="statistical">Statistical (Fast)</option>
-            </select>
-          </div>
           <Button 
             variant="default" 
             onClick={runMLPredictions}
