@@ -15,7 +15,7 @@ interface Location {
   zone: string;
   capacity: number;
   items: any[];
-  totalQuantity: number;
+  totalVolume: number;
 }
 
 export default function WarehouseMap() {
@@ -44,18 +44,20 @@ export default function WarehouseMap() {
             const category = subcategory ? categories.find(c => c.id === subcategory.category_id) : null;
             return {
               ...item,
+              volumePerUnit: item.volume_per_unit || 1,
               subcategories: subcategory ? {
                 name: subcategory.name,
                 categories: category ? { name: category.name } : null
               } : null
             };
           });
-        const totalQty = locItems.reduce((sum, item) => sum + item.quantity, 0);
+        // Calculate total volume instead of quantity
+        const totalVolume = locItems.reduce((sum, item) => sum + (item.quantity * (item.volumePerUnit || 1)), 0);
         return {
           ...loc,
           zone: loc.zone || 'Zone A',
           items: locItems,
-          totalQuantity: totalQty,
+          totalVolume: totalVolume,
         };
       });
 
@@ -85,7 +87,7 @@ export default function WarehouseMap() {
   }, []);
 
   const getLocationColor = (location: Location) => {
-    const utilizationPercent = (location.totalQuantity / location.capacity) * 100;
+    const utilizationPercent = (location.totalVolume / location.capacity) * 100;
     if (utilizationPercent === 0) return "bg-muted hover:bg-muted/80";
     if (utilizationPercent < 75) return "bg-warning/30 hover:bg-warning/40 border-warning";
     return "bg-destructive/30 hover:bg-destructive/40 border-destructive";
@@ -107,12 +109,14 @@ export default function WarehouseMap() {
         return;
       }
 
-      // Check if moving would exceed capacity
-      const newTotalAfterMove = newLocation.totalQuantity + itemToMove.quantity;
+      // Check if moving would exceed capacity (using volume)
+      const itemVolume = itemToMove.quantity * (itemToMove.volumePerUnit || 1);
+      const newTotalAfterMove = newLocation.totalVolume + itemVolume;
       if (newTotalAfterMove > newLocation.capacity) {
+        const availableSpace = newLocation.capacity - newLocation.totalVolume;
         toast({
           title: "Capacity Exceeded",
-          description: `Cannot move ${itemToMove.quantity} units. ${newLocation.label} only has ${newLocation.capacity - newLocation.totalQuantity} units of space available.`,
+          description: `Cannot move item (volume: ${itemVolume.toFixed(1)}). ${newLocation.label} only has ${availableSpace.toFixed(1)} units of space available.`,
           variant: "destructive",
         });
         return;
@@ -201,7 +205,7 @@ export default function WarehouseMap() {
                       >
                         <span className="font-bold text-sm">{location.label}</span>
                         <span className="text-xs text-muted-foreground mt-1">
-                          {location.totalQuantity}/{location.capacity}
+                          {location.totalVolume.toFixed(0)}/{location.capacity}
                         </span>
                       </button>
                     ))}
@@ -228,9 +232,9 @@ export default function WarehouseMap() {
                 <p className="font-medium">{selectedLocation?.zone}</p>
               </div>
               <div>
-                <p className="text-sm text-muted-foreground">Capacity</p>
+                <p className="text-sm text-muted-foreground">Capacity (Volume)</p>
                 <p className="font-medium">
-                  {selectedLocation?.totalQuantity} / {selectedLocation?.capacity}
+                  {selectedLocation?.totalVolume.toFixed(1)} / {selectedLocation?.capacity}
                 </p>
               </div>
             </div>
@@ -247,6 +251,7 @@ export default function WarehouseMap() {
                           {item.sku && (
                             <p className="text-sm text-muted-foreground">SKU: {item.sku}</p>
                           )}
+                          <p className="text-xs text-muted-foreground">Vol/unit: {item.volumePerUnit || 1}</p>
                         </div>
                         <Badge variant="secondary">{item.quantity} units</Badge>
                       </div>
@@ -291,7 +296,7 @@ export default function WarehouseMap() {
                 <SelectContent>
                   {locations.map(loc => (
                     <SelectItem key={loc.id} value={loc.id}>
-                      {loc.label} - {loc.zone} ({loc.totalQuantity}/{loc.capacity})
+                      {loc.label} - {loc.zone} ({loc.totalVolume.toFixed(0)}/{loc.capacity})
                     </SelectItem>
                   ))}
                 </SelectContent>
