@@ -69,6 +69,7 @@ interface Item {
   supplierId?: string;
   costPrice?: number;
   sellingPrice?: number;
+  volumePerUnit: number;
   locationId?: string;
   locationLabel?: string;
   status: "normal" | "low";
@@ -142,7 +143,7 @@ export default function Inventory() {
   const [categoryForm, setCategoryForm] = useState({ name: "" });
   const [subcategoryForm, setSubcategoryForm] = useState({ name: "" });
   const [itemForm, setItemForm] = useState({ 
-    name: "", sku: "", unit: "pcs", reorderLevel: 15, supplierId: "", costPrice: 0, sellingPrice: 0, locationId: "", locationLabel: "",
+    name: "", sku: "", unit: "pcs", reorderLevel: 15, supplierId: "", costPrice: 0, sellingPrice: 0, volumePerUnit: 1, locationId: "", locationLabel: "",
     batches: [{ batchNumber: "", quantity: 0, expiryDate: "" }]
   });
   const [batchForm, setBatchForm] = useState({ batchNumber: "", quantity: 0, expiryDate: "" });
@@ -198,6 +199,7 @@ export default function Inventory() {
                   supplierId: item.supplier_id || undefined,
                   costPrice: item.cost_price || undefined,
                   sellingPrice: item.selling_price || undefined,
+                  volumePerUnit: item.volume_per_unit || 1,
                   locationId: item.location_id || undefined,
                   locationLabel: location?.label || undefined,
                   status,
@@ -318,6 +320,7 @@ export default function Inventory() {
       supplier_id: itemForm.supplierId || null,
       cost_price: itemForm.costPrice || null,
       selling_price: itemForm.sellingPrice || null,
+      volume_per_unit: itemForm.volumePerUnit || 1,
       location_id: itemForm.locationId || null,
       subcategory_id: itemDialog.subcategoryId,
       predicted_stock: null,
@@ -346,7 +349,7 @@ export default function Inventory() {
     });
 
     setItemDialog({ open: false, mode: "add" });
-    setItemForm({ name: "", sku: "", unit: "pcs", reorderLevel: 15, supplierId: "", costPrice: 0, sellingPrice: 0, locationId: "", locationLabel: "", batches: [{ batchNumber: "", quantity: 0, expiryDate: "" }] });
+    setItemForm({ name: "", sku: "", unit: "pcs", reorderLevel: 15, supplierId: "", costPrice: 0, sellingPrice: 0, volumePerUnit: 1, locationId: "", locationLabel: "", batches: [{ batchNumber: "", quantity: 0, expiryDate: "" }] });
     setSkuError("");
     toast({ title: "Item added successfully" });
     loadData();
@@ -364,6 +367,7 @@ export default function Inventory() {
       supplier_id: itemForm.supplierId || null,
       cost_price: itemForm.costPrice || null,
       selling_price: itemForm.sellingPrice || null,
+      volume_per_unit: itemForm.volumePerUnit || 1,
       location_id: itemForm.locationId || null,
     });
 
@@ -398,7 +402,7 @@ export default function Inventory() {
     }
 
     setItemDialog({ open: false, mode: "add" });
-    setItemForm({ name: "", sku: "", unit: "pcs", reorderLevel: 15, supplierId: "", costPrice: 0, sellingPrice: 0, locationId: "", locationLabel: "", batches: [{ batchNumber: "", quantity: 0, expiryDate: "" }] });
+    setItemForm({ name: "", sku: "", unit: "pcs", reorderLevel: 15, supplierId: "", costPrice: 0, sellingPrice: 0, volumePerUnit: 1, locationId: "", locationLabel: "", batches: [{ batchNumber: "", quantity: 0, expiryDate: "" }] });
     setSkuError("");
     toast({ title: "Item updated successfully" });
     loadData();
@@ -589,7 +593,7 @@ export default function Inventory() {
                                   <Button size="sm" variant="ghost" onClick={() => { setHistoryDialog({ open: true, itemId: item.id, itemName: item.name }); loadStockHistory(item.id); }}>
                                     <History className="h-4 w-4" />
                                   </Button>
-                                  <Button size="sm" variant="ghost" onClick={() => { setItemDialog({ open: true, mode: "edit", categoryId: category.id, subcategoryId: subcategory.id, data: item }); setItemForm({ name: item.name, sku: item.sku || "", unit: item.unit, reorderLevel: item.reorderLevel, supplierId: item.supplierId || "", costPrice: item.costPrice || 0, sellingPrice: item.sellingPrice || 0, locationId: item.locationId || "", locationLabel: item.locationLabel || "", batches: [{ batchNumber: "", quantity: 0, expiryDate: "" }] }); }}>
+                                  <Button size="sm" variant="ghost" onClick={() => { setItemDialog({ open: true, mode: "edit", categoryId: category.id, subcategoryId: subcategory.id, data: item }); setItemForm({ name: item.name, sku: item.sku || "", unit: item.unit, reorderLevel: item.reorderLevel, supplierId: item.supplierId || "", costPrice: item.costPrice || 0, sellingPrice: item.sellingPrice || 0, volumePerUnit: item.volumePerUnit || 1, locationId: item.locationId || "", locationLabel: item.locationLabel || "", batches: [{ batchNumber: "", quantity: 0, expiryDate: "" }] }); }}>
                                     <Edit className="h-4 w-4" />
                                   </Button>
                                   <Button size="sm" variant="ghost" onClick={() => setDeleteDialog({ open: true, type: "item", id: item.id, parentId: category.id, subParentId: subcategory.id })}>
@@ -678,6 +682,7 @@ export default function Inventory() {
               <div><Label>SKU *</Label><Input value={itemForm.sku} onChange={(e) => setItemForm({ ...itemForm, sku: e.target.value })} />{skuError && <p className="text-destructive text-sm">{skuError}</p>}</div>
               <div><Label>Unit</Label><Input value={itemForm.unit} onChange={(e) => setItemForm({ ...itemForm, unit: e.target.value })} /></div>
               <div><Label>Reorder Level</Label><Input type="number" value={itemForm.reorderLevel} onChange={(e) => setItemForm({ ...itemForm, reorderLevel: parseInt(e.target.value) || 0 })} /></div>
+              <div><Label>Volume Per Unit</Label><Input type="number" step="0.1" min="0.1" value={itemForm.volumePerUnit} onChange={(e) => setItemForm({ ...itemForm, volumePerUnit: parseFloat(e.target.value) || 1 })} placeholder="Space occupied per unit" /></div>
               <div><Label>Supplier</Label><Input value={itemForm.supplierId} onChange={(e) => setItemForm({ ...itemForm, supplierId: e.target.value })} /></div>
               <div><Label>Location</Label><div className="flex gap-2"><Input value={itemForm.locationLabel} readOnly placeholder="Select location" /><Button variant="outline" onClick={() => setLocationPickerOpen(true)}><MapPin className="h-4 w-4" /></Button></div></div>
             </div>

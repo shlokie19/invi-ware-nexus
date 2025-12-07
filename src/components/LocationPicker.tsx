@@ -10,7 +10,7 @@ interface Location {
   label: string;
   zone: string;
   capacity: number;
-  totalQuantity: number;
+  totalVolume: number;
 }
 
 interface LocationPickerProps {
@@ -37,11 +37,11 @@ export function LocationPicker({ open, onOpenChange, onSelect, currentLocationId
 
         const enrichedLocations = locationData.map(loc => {
           const locItems = itemData.filter(item => item.location_id === loc.id);
-          const totalQty = locItems.reduce((sum, item) => sum + item.quantity, 0);
+          const totalVolume = locItems.reduce((sum, item) => sum + (item.quantity * (item.volume_per_unit || 1)), 0);
           return {
             ...loc,
             zone: loc.zone || 'Zone A',
-            totalQuantity: totalQty,
+            totalVolume: totalVolume,
           };
         });
 
@@ -62,7 +62,7 @@ export function LocationPicker({ open, onOpenChange, onSelect, currentLocationId
   }, [open, toast]);
 
   const getLocationColor = (location: Location) => {
-    const utilizationPercent = (location.totalQuantity / location.capacity) * 100;
+    const utilizationPercent = (location.totalVolume / location.capacity) * 100;
     if (location.id === currentLocationId) return "bg-primary/20 border-primary ring-2 ring-primary";
     if (utilizationPercent === 0) return "bg-muted hover:bg-muted/80";
     if (utilizationPercent < 75) return "bg-warning/30 hover:bg-warning/40 border-warning";
@@ -126,7 +126,7 @@ export function LocationPicker({ open, onOpenChange, onSelect, currentLocationId
                         >
                           <span className="font-bold text-xs">{location.label}</span>
                           <span className="text-[10px] text-muted-foreground mt-1">
-                            {location.totalQuantity}/{location.capacity}
+                            {location.totalVolume.toFixed(0)}/{location.capacity}
                           </span>
                         </button>
                       ))}

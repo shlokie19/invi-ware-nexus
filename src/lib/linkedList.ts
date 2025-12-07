@@ -29,6 +29,7 @@ export interface ItemData {
   location_id: string | null;
   subcategory_id: string;
   supplier_id: string | null;
+  volume_per_unit: number; // Volume each unit occupies in storage
   predicted_stock: number | null;
   prediction_confidence: number | null;
   prediction_trend: string | null;
@@ -825,6 +826,7 @@ export const initializeData = () => {
     location_id: locA1.id,
     subcategory_id: phones.id,
     supplier_id: 'Apple Inc.',
+    volume_per_unit: 1,
     predicted_stock: 20,
     prediction_confidence: 85,
     prediction_trend: 'decreasing',
@@ -841,6 +843,7 @@ export const initializeData = () => {
     location_id: locA2.id,
     subcategory_id: laptops.id,
     supplier_id: 'Apple Inc.',
+    volume_per_unit: 3,
     predicted_stock: 6,
     prediction_confidence: 75,
     prediction_trend: 'decreasing',
@@ -857,6 +860,7 @@ export const initializeData = () => {
     location_id: locB1.id,
     subcategory_id: paper.id,
     supplier_id: 'Paper Co.',
+    volume_per_unit: 0.5,
     predicted_stock: 100,
     prediction_confidence: 90,
     prediction_trend: 'stable',
