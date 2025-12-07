@@ -142,15 +142,15 @@ export default function WarehouseMap() {
         <div className="flex gap-4 items-center text-sm">
           <div className="flex items-center gap-2">
             <div className="w-4 h-4 bg-muted border rounded" />
-            <span>Empty</span>
+            <span className="text-foreground font-medium">Empty</span>
           </div>
           <div className="flex items-center gap-2">
             <div className="w-4 h-4 bg-warning/30 border border-warning rounded" />
-            <span>&lt;75% Full</span>
+            <span className="text-foreground font-medium">&lt;75% Full</span>
           </div>
           <div className="flex items-center gap-2">
             <div className="w-4 h-4 bg-destructive/30 border border-destructive rounded" />
-            <span>≥75% Full</span>
+            <span className="text-foreground font-medium">≥75% Full</span>
           </div>
         </div>
       </div>
