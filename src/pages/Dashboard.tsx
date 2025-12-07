@@ -98,8 +98,8 @@ export default function Dashboard() {
     };
   }, []);
 
-  // Fetch stock history when selected item changes
-  useEffect(() => {
+  // Fetch stock history function
+  const fetchStockHistory = () => {
     if (!selectedItemId) return;
     
     setIsLoadingHistory(true);
@@ -125,7 +125,19 @@ export default function Dashboard() {
     } finally {
       setIsLoadingHistory(false);
     }
-  }, [selectedItemId, toast]);
+  };
+
+  // Fetch stock history when selected item changes
+  useEffect(() => {
+    fetchStockHistory();
+  }, [selectedItemId]);
+
+  // Also refresh stock history when items data changes
+  useEffect(() => {
+    if (selectedItemId) {
+      fetchStockHistory();
+    }
+  }, [items]);
 
   return (
     <div className="space-y-6">
