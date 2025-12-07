@@ -776,10 +776,42 @@ export const initializeData = () => {
   const laptops = subcategoriesDB.create('Laptops', electronics.id);
   const paper = subcategoriesDB.create('Paper Products', office.id);
   
-  // Seed locations
+  // Seed locations - 10+ per zone
+  // Zone A locations
   const locA1 = locationsDB.create({ label: 'A-1', zone: 'Zone A', capacity: 100 });
   const locA2 = locationsDB.create({ label: 'A-2', zone: 'Zone A', capacity: 100 });
+  const locA3 = locationsDB.create({ label: 'A-3', zone: 'Zone A', capacity: 120 });
+  const locA4 = locationsDB.create({ label: 'A-4', zone: 'Zone A', capacity: 80 });
+  const locA5 = locationsDB.create({ label: 'A-5', zone: 'Zone A', capacity: 100 });
+  const locA6 = locationsDB.create({ label: 'A-6', zone: 'Zone A', capacity: 150 });
+  const locA7 = locationsDB.create({ label: 'A-7', zone: 'Zone A', capacity: 100 });
+  const locA8 = locationsDB.create({ label: 'A-8', zone: 'Zone A', capacity: 90 });
+  const locA9 = locationsDB.create({ label: 'A-9', zone: 'Zone A', capacity: 110 });
+  const locA10 = locationsDB.create({ label: 'A-10', zone: 'Zone A', capacity: 100 });
+  
+  // Zone B locations
   const locB1 = locationsDB.create({ label: 'B-1', zone: 'Zone B', capacity: 150 });
+  const locB2 = locationsDB.create({ label: 'B-2', zone: 'Zone B', capacity: 150 });
+  const locB3 = locationsDB.create({ label: 'B-3', zone: 'Zone B', capacity: 120 });
+  const locB4 = locationsDB.create({ label: 'B-4', zone: 'Zone B', capacity: 100 });
+  const locB5 = locationsDB.create({ label: 'B-5', zone: 'Zone B', capacity: 130 });
+  const locB6 = locationsDB.create({ label: 'B-6', zone: 'Zone B', capacity: 150 });
+  const locB7 = locationsDB.create({ label: 'B-7', zone: 'Zone B', capacity: 140 });
+  const locB8 = locationsDB.create({ label: 'B-8', zone: 'Zone B', capacity: 100 });
+  const locB9 = locationsDB.create({ label: 'B-9', zone: 'Zone B', capacity: 110 });
+  const locB10 = locationsDB.create({ label: 'B-10', zone: 'Zone B', capacity: 150 });
+  
+  // Zone C locations
+  const locC1 = locationsDB.create({ label: 'C-1', zone: 'Zone C', capacity: 200 });
+  const locC2 = locationsDB.create({ label: 'C-2', zone: 'Zone C', capacity: 200 });
+  const locC3 = locationsDB.create({ label: 'C-3', zone: 'Zone C', capacity: 180 });
+  const locC4 = locationsDB.create({ label: 'C-4', zone: 'Zone C', capacity: 150 });
+  const locC5 = locationsDB.create({ label: 'C-5', zone: 'Zone C', capacity: 200 });
+  const locC6 = locationsDB.create({ label: 'C-6', zone: 'Zone C', capacity: 220 });
+  const locC7 = locationsDB.create({ label: 'C-7', zone: 'Zone C', capacity: 180 });
+  const locC8 = locationsDB.create({ label: 'C-8', zone: 'Zone C', capacity: 160 });
+  const locC9 = locationsDB.create({ label: 'C-9', zone: 'Zone C', capacity: 200 });
+  const locC10 = locationsDB.create({ label: 'C-10', zone: 'Zone C', capacity: 200 });
   
   // Seed items
   const iphone = itemsDB.create({
