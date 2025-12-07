@@ -850,14 +850,14 @@ export const initializeData = () => {
     name: 'A4 Printer Paper',
     sku: 'PPR-A4-500',
     unit: 'reams',
-    quantity: 200,
+    quantity: 120,
     reorder_level: 50,
     cost_price: 5,
     selling_price: 8,
     location_id: locB1.id,
     subcategory_id: paper.id,
     supplier_id: 'Paper Co.',
-    predicted_stock: 180,
+    predicted_stock: 100,
     prediction_confidence: 90,
     prediction_trend: 'stable',
   });
@@ -890,14 +890,14 @@ export const initializeData = () => {
   
   batchesDB.create({
     batch_number: 'PPR-2024-001',
-    quantity: 100,
+    quantity: 60,
     expiry_date: nextWeek.toISOString().split('T')[0],
     item_id: printer_paper.id,
   });
   
   batchesDB.create({
     batch_number: 'PPR-2024-002',
-    quantity: 100,
+    quantity: 60,
     expiry_date: nextMonth.toISOString().split('T')[0],
     item_id: printer_paper.id,
   });
