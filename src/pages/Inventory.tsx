@@ -680,7 +680,7 @@ export default function Inventory() {
             <div className="grid grid-cols-2 gap-4">
               <div><Label>Name *</Label><Input value={itemForm.name} onChange={(e) => setItemForm({ ...itemForm, name: e.target.value })} /></div>
               <div><Label>SKU *</Label><Input value={itemForm.sku} onChange={(e) => setItemForm({ ...itemForm, sku: e.target.value })} />{skuError && <p className="text-destructive text-sm">{skuError}</p>}</div>
-              <div><Label>Unit</Label><Input value={itemForm.unit} onChange={(e) => setItemForm({ ...itemForm, unit: e.target.value })} /></div>
+              <div><Label>Unit Type (e.g., pcs, kg, boxes)</Label><Input value={itemForm.unit} onChange={(e) => setItemForm({ ...itemForm, unit: e.target.value })} placeholder="pcs" /></div>
               <div><Label>Reorder Level</Label><Input type="number" value={itemForm.reorderLevel} onChange={(e) => setItemForm({ ...itemForm, reorderLevel: parseInt(e.target.value) || 0 })} /></div>
               <div><Label>Volume Per Unit</Label><Input type="number" step="0.1" min="0.1" value={itemForm.volumePerUnit} onChange={(e) => setItemForm({ ...itemForm, volumePerUnit: parseFloat(e.target.value) || 1 })} placeholder="Space occupied per unit" /></div>
               <div><Label>Supplier</Label><Input value={itemForm.supplierId} onChange={(e) => setItemForm({ ...itemForm, supplierId: e.target.value })} /></div>
