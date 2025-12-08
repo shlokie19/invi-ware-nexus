@@ -154,7 +154,8 @@ export default function WarehouseMap() {
     }
   };
 
-  const zones = ["Zone A", "Zone B", "Zone C"];
+  // Get zones dynamically from categories
+  const zones = [...new Set(locations.map(loc => loc.zone).filter(Boolean))];
 
   return (
     <div className="space-y-6">

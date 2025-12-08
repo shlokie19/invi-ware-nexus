@@ -334,6 +334,18 @@ export const categoriesDB = {
     const heads = headPointers.get();
     const newHead = appendToList(categoriesLL, heads.categories, id);
     headPointers.setCategoriesHead(newHead);
+    
+    // Auto-create zone with 10 locations for this category
+    const zoneName = name; // Zone name = Category name
+    const zonePrefix = name.charAt(0).toUpperCase();
+    for (let i = 1; i <= 10; i++) {
+      locationsDB.create({ 
+        label: `${zonePrefix}-${i}`, 
+        zone: zoneName, 
+        capacity: 100 + (i * 10) // Varying capacities
+      });
+    }
+    
     return { id, ...data };
   },
   
@@ -350,12 +362,36 @@ export const categoriesDB = {
   },
   
   update: (id: string, name: string) => {
+    const oldCategory = categoriesDB.getById(id);
+    const oldZoneName = oldCategory?.name;
+    
     categoriesLL.updateNode(id, { name });
+    
+    // Update zone names for all locations in this zone
+    if (oldZoneName) {
+      const locations = locationsDB.getAll().filter(loc => loc.zone === oldZoneName);
+      const newPrefix = name.charAt(0).toUpperCase();
+      locations.forEach((loc, idx) => {
+        locationsDB.update(loc.id, { 
+          zone: name,
+          label: `${newPrefix}-${idx + 1}`
+        });
+      });
+    }
+    
     const node = categoriesLL.getNode(id);
     return node ? { id: node.id, ...node.data } : null;
   },
   
   delete: (id: string) => {
+    // Get category name to delete associated zone/locations
+    const category = categoriesDB.getById(id);
+    if (category) {
+      // Delete all locations in this category's zone
+      const locations = locationsDB.getAll().filter(loc => loc.zone === category.name);
+      locations.forEach(loc => locationsDB.delete(loc.id));
+    }
+    
     // Delete all subcategories and their items/batches
     const subcats = subcategoriesDB.getAll().filter(s => s.category_id === id);
     subcats.forEach(sub => subcategoriesDB.delete(sub.id));
@@ -768,7 +804,7 @@ export const initializeData = () => {
   const categories = categoriesDB.getAll();
   if (categories.length > 0) return;
   
-  // Seed categories
+  // Seed categories (auto-creates zones with 10 locations each)
   const electronics = categoriesDB.create('Electronics');
   const office = categoriesDB.create('Office Supplies');
   
@@ -777,44 +813,15 @@ export const initializeData = () => {
   const laptops = subcategoriesDB.create('Laptops', electronics.id);
   const paper = subcategoriesDB.create('Paper Products', office.id);
   
-  // Seed locations - 10+ per zone
-  // Zone A locations
-  const locA1 = locationsDB.create({ label: 'A-1', zone: 'Zone A', capacity: 100 });
-  const locA2 = locationsDB.create({ label: 'A-2', zone: 'Zone A', capacity: 100 });
-  const locA3 = locationsDB.create({ label: 'A-3', zone: 'Zone A', capacity: 120 });
-  const locA4 = locationsDB.create({ label: 'A-4', zone: 'Zone A', capacity: 80 });
-  const locA5 = locationsDB.create({ label: 'A-5', zone: 'Zone A', capacity: 100 });
-  const locA6 = locationsDB.create({ label: 'A-6', zone: 'Zone A', capacity: 150 });
-  const locA7 = locationsDB.create({ label: 'A-7', zone: 'Zone A', capacity: 100 });
-  const locA8 = locationsDB.create({ label: 'A-8', zone: 'Zone A', capacity: 90 });
-  const locA9 = locationsDB.create({ label: 'A-9', zone: 'Zone A', capacity: 110 });
-  const locA10 = locationsDB.create({ label: 'A-10', zone: 'Zone A', capacity: 100 });
+  // Get locations for each zone (auto-created by categoriesDB.create)
+  const electronicsLocations = locationsDB.getAll().filter(l => l.zone === 'Electronics');
+  const officeLocations = locationsDB.getAll().filter(l => l.zone === 'Office Supplies');
   
-  // Zone B locations
-  const locB1 = locationsDB.create({ label: 'B-1', zone: 'Zone B', capacity: 150 });
-  const locB2 = locationsDB.create({ label: 'B-2', zone: 'Zone B', capacity: 150 });
-  const locB3 = locationsDB.create({ label: 'B-3', zone: 'Zone B', capacity: 120 });
-  const locB4 = locationsDB.create({ label: 'B-4', zone: 'Zone B', capacity: 100 });
-  const locB5 = locationsDB.create({ label: 'B-5', zone: 'Zone B', capacity: 130 });
-  const locB6 = locationsDB.create({ label: 'B-6', zone: 'Zone B', capacity: 150 });
-  const locB7 = locationsDB.create({ label: 'B-7', zone: 'Zone B', capacity: 140 });
-  const locB8 = locationsDB.create({ label: 'B-8', zone: 'Zone B', capacity: 100 });
-  const locB9 = locationsDB.create({ label: 'B-9', zone: 'Zone B', capacity: 110 });
-  const locB10 = locationsDB.create({ label: 'B-10', zone: 'Zone B', capacity: 150 });
+  const locE1 = electronicsLocations[0];
+  const locE2 = electronicsLocations[1];
+  const locO1 = officeLocations[0];
   
-  // Zone C locations
-  const locC1 = locationsDB.create({ label: 'C-1', zone: 'Zone C', capacity: 200 });
-  const locC2 = locationsDB.create({ label: 'C-2', zone: 'Zone C', capacity: 200 });
-  const locC3 = locationsDB.create({ label: 'C-3', zone: 'Zone C', capacity: 180 });
-  const locC4 = locationsDB.create({ label: 'C-4', zone: 'Zone C', capacity: 150 });
-  const locC5 = locationsDB.create({ label: 'C-5', zone: 'Zone C', capacity: 200 });
-  const locC6 = locationsDB.create({ label: 'C-6', zone: 'Zone C', capacity: 220 });
-  const locC7 = locationsDB.create({ label: 'C-7', zone: 'Zone C', capacity: 180 });
-  const locC8 = locationsDB.create({ label: 'C-8', zone: 'Zone C', capacity: 160 });
-  const locC9 = locationsDB.create({ label: 'C-9', zone: 'Zone C', capacity: 200 });
-  const locC10 = locationsDB.create({ label: 'C-10', zone: 'Zone C', capacity: 200 });
-  
-  // Seed items
+  // Seed items - assign to locations in their category's zone
   const iphone = itemsDB.create({
     name: 'iPhone 15 Pro',
     sku: 'IPH-15-PRO',
@@ -823,7 +830,7 @@ export const initializeData = () => {
     reorder_level: 10,
     cost_price: 999,
     selling_price: 1199,
-    location_id: locA1.id,
+    location_id: locE1?.id || null,
     subcategory_id: phones.id,
     supplier_id: 'Apple Inc.',
     volume_per_unit: 1,
@@ -840,7 +847,7 @@ export const initializeData = () => {
     reorder_level: 5,
     cost_price: 1999,
     selling_price: 2399,
-    location_id: locA2.id,
+    location_id: locE2?.id || null,
     subcategory_id: laptops.id,
     supplier_id: 'Apple Inc.',
     volume_per_unit: 3,
@@ -853,11 +860,11 @@ export const initializeData = () => {
     name: 'A4 Printer Paper',
     sku: 'PPR-A4-500',
     unit: 'reams',
-    quantity: 120,
+    quantity: 60,
     reorder_level: 50,
     cost_price: 5,
     selling_price: 8,
-    location_id: locB1.id,
+    location_id: locO1?.id || null,
     subcategory_id: paper.id,
     supplier_id: 'Paper Co.',
     volume_per_unit: 0.5,
@@ -894,14 +901,14 @@ export const initializeData = () => {
   
   batchesDB.create({
     batch_number: 'PPR-2024-001',
-    quantity: 60,
+    quantity: 30,
     expiry_date: nextWeek.toISOString().split('T')[0],
     item_id: printer_paper.id,
   });
   
   batchesDB.create({
     batch_number: 'PPR-2024-002',
-    quantity: 60,
+    quantity: 30,
     expiry_date: nextMonth.toISOString().split('T')[0],
     item_id: printer_paper.id,
   });
@@ -931,9 +938,9 @@ export const initializeData = () => {
   
   stockHistoryDB.create({
     item_id: printer_paper.id,
-    quantity_change: 200,
+    quantity_change: 60,
     previous_quantity: 0,
-    new_quantity: 200,
+    new_quantity: 60,
     action: 'INSERT',
     change_type: 'restock',
     note: 'Initial stock',
